@@ -249,10 +249,12 @@ function runStateMachine(userMessage, sessionData) {
         }
 
         // Step 2: Doctor
-        const isSelectingDoc = msg.includes('select') || msg.includes('doctor') || msg.includes('specialist') || msg.includes('dr.');
+        const looksLikeTime = extractTime(msg);
+        const isSelectingDoc = (msg.includes('select') || msg.includes('specialist') || msg.includes('dr.')) && !looksLikeTime;
+        
         if (data.serviceCategory && (!data.doctorName || isSelectingDoc)) {
             const docName = userMessage.replace(/select specialist|select|specialist/gi, '').trim();
-            if (docName.length > 3) {
+            if (docName.length > 3 && !extractTime(docName)) {
                 data.doctorName = docName;
                 return reply(data, 'ask_date', `Great. Which date would you like to see ${docName}?`);
             }
