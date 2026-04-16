@@ -67,9 +67,7 @@ const ChatPage = () => {
 
   const handleSend = async (messageText) => {
     const textToSend = typeof messageText === 'string' ? messageText : input;
-    if (!textToSend.trim() || isTyping) return;
-
-    // Local reset
+    // Local reset (always allowed, even while typing)
     if (textToSend === 'Main Menu') {
       setMessages([{
         id: 'welcome',
@@ -81,6 +79,8 @@ const ChatPage = () => {
       setSessionData({});
       return;
     }
+
+    if (!textToSend.trim() || isTyping) return;
 
     setMessages(prev => [...prev, { id: Date.now(), text: textToSend, isBot: false }]);
     setInput('');
@@ -205,17 +205,26 @@ const ChatPage = () => {
         
         {/* Chat Column */}
         <div className="flex flex-col h-screen border-x border-slate-200/80 bg-white/60">
-          <header className="px-8 py-6 flex items-center space-x-4 border-b border-slate-200/80 bg-white/80 backdrop-blur-md">
+          <header className="px-8 py-6 flex items-center justify-between border-b border-slate-200/80 bg-white/80 backdrop-blur-md">
             <div className="relative">
               <div className="w-12 h-12 bg-blue-gradient rounded-2xl flex items-center justify-center blue-glow animate-float">
                 <Bot className="text-white w-7 h-7" />
               </div>
               <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 border-4 border-white rounded-full" />
             </div>
-            <div>
+            <div className="flex-1 ml-4">
               <h1 className="font-bold text-xl text-slate-900">Elite Concierge</h1>
               <p className="text-xs text-blue-600 uppercase tracking-widest opacity-80">AI Receptionist</p>
             </div>
+
+            <button
+              type="button"
+              onClick={() => handleSend('Main Menu')}
+              className="hidden sm:inline-flex items-center justify-center px-4 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold uppercase tracking-widest transition-colors"
+              title="Return to Main Menu"
+            >
+              🔙 Main Menu
+            </button>
           </header>
 
           <main className="flex-1 overflow-y-auto px-6 py-8 space-y-4 bg-transparent">
@@ -561,6 +570,16 @@ const ChatPage = () => {
             </form>
           </footer>
         </div>
+
+        {/* Persistent corner Main Menu (mobile + always accessible) */}
+        <button
+          type="button"
+          onClick={() => handleSend('Main Menu')}
+          className="sm:hidden fixed right-4 bottom-20 z-50 px-4 py-3 rounded-2xl bg-white/95 backdrop-blur border border-slate-200 shadow-[0_18px_40px_rgba(15,23,42,0.10)] text-slate-700 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 active:scale-[0.99]"
+          title="Return to Main Menu"
+        >
+          🔙 Main Menu
+        </button>
 
         {/* Sidebar */}
         <aside className="hidden lg:flex flex-col h-screen bg-white/55 p-8 space-y-6 border-l border-slate-200/70">
