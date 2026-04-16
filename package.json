@@ -1,0 +1,26 @@
+{
+  "name": "appointment-booking",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.89.0",
+    "axios": "^1.15.0",
+    "cors": "^2.8.6",
+    "date-fns": "^4.1.0",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "framer-motion": "^12.38.0",
+    "lucide-react": "^1.8.0",
+    "mongoose": "^9.4.1",
+    "react-router-dom": "^7.14.1",
+    "uuid": "^13.0.0"
+  }
+}
