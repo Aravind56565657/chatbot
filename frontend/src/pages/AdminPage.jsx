@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Users, Clock, CheckCircle2, Calendar as CalendarIcon, 
@@ -44,6 +45,7 @@ const StatCard = ({ title, value, icon: Icon, color, delay }) => (
 );
 
 const AdminPage = () => {
+  const navigate = useNavigate();
   const [appointments, setAppointments] = useState([]);
   const [services, setServices] = useState([]);
   const [allDoctors, setAllDoctors] = useState([]);
@@ -53,6 +55,19 @@ const AdminPage = () => {
   const [selectedApt, setSelectedApt] = useState(null);
   const [filter, setFilter] = useState({ status: '', search: '' });
   const [stats, setStats] = useState({ total: 0, pending: 0, confirmed: 0, today: 0 });
+
+  // Security Gate
+  useEffect(() => {
+    const isAuth = localStorage.getItem('adminAuth');
+    if (!isAuth) {
+      navigate('/admin/login');
+    }
+  }, [navigate]);
+
+  const handleLogout = () => {
+    localStorage.removeItem('adminAuth');
+    navigate('/admin/login');
+  };
 
   // Fetch doctors for the modal
   useEffect(() => {
@@ -113,11 +128,19 @@ const AdminPage = () => {
       <aside className="w-80 border-r border-slate-200 flex flex-col p-8 z-30 hidden xl:flex bg-white/85 backdrop-blur-3xl">
         <h1 className="text-xl font-bold text-slate-900 mb-3">Vanguard Admin</h1>
         <p className="text-sm text-slate-500 mb-9">Appointment operations and live booking records.</p>
-        <nav className="space-y-2">
+        <nav className="space-y-2 mb-auto">
             {[{ name: 'Full Database', slug: '', icon: Users }, { name: 'Pending Review', slug: 'pending', icon: Clock }, { name: 'Confirmed List', slug: 'confirmed', icon: CheckCircle2 }].map(item => (
                 <button key={item.slug} onClick={() => setFilter({ ...filter, status: item.slug })} className={`${styles.sidebarItem} ${filter.status === item.slug ? styles.activeSidebar : styles.inactiveSidebar}`}><item.icon className="w-4 h-4" /><span>{item.name}</span></button>
             ))}
         </nav>
+        
+        <button 
+          onClick={handleLogout}
+          className="mt-10 w-full flex items-center space-x-3 px-4 py-3.5 rounded-2xl text-sm transition-all duration-300 text-rose-500 hover:bg-rose-50 font-bold"
+        >
+          <LogOut className="w-4 h-4" />
+          <span>Exit System</span>
+        </button>
       </aside>
 
       <main className="flex-1 p-12 z-10 overflow-x-hidden">
