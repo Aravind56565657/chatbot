@@ -220,10 +220,10 @@ const ChatPage = () => {
             <button
               type="button"
               onClick={() => handleSend('Main Menu')}
-              className="hidden sm:inline-flex items-center justify-center px-4 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold uppercase tracking-widest transition-colors"
+              className="inline-flex items-center justify-center px-3 py-2 sm:px-4 sm:py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-[10px] sm:text-xs font-bold uppercase tracking-widest transition-colors whitespace-nowrap"
               title="Return to Main Menu"
             >
-              🔙 Main Menu
+              🔙 <span className="hidden xs:inline">Main Menu</span><span className="xs:hidden">Menu</span>
             </button>
           </header>
 
@@ -556,30 +556,29 @@ const ChatPage = () => {
             <div ref={chatEndRef} />
           </main>
 
-          <footer className="p-6 bg-white/80 backdrop-blur-xl border-t border-slate-200/80">
-            <form onSubmit={(e) => { e.preventDefault(); handleSend(); }} className="glass-panel rounded-2xl flex items-center p-2 pr-4">
-              <MessageSquare className="w-5 h-5 text-slate-400 ml-4" />
+          <footer
+            className="px-3 py-3 sm:p-6 bg-white/80 backdrop-blur-xl border-t border-slate-200/80"
+            style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}
+          >
+            <form onSubmit={(e) => { e.preventDefault(); handleSend(); }} className="glass-panel rounded-2xl flex items-center p-1 sm:p-2 sm:pr-4 pr-2">
+              <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5 text-slate-400 ml-3 sm:ml-4 flex-shrink-0" />
               <input
                 type="text" value={input} onChange={(e) => setInput(e.target.value)}
                 placeholder="Type your message..."
-                className="flex-1 bg-transparent border-none focus:ring-0 px-4 py-3 text-slate-700 placeholder:text-slate-400 font-medium"
+                className="flex-1 bg-transparent border-none focus:ring-0 px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base text-slate-700 placeholder:text-slate-400 font-medium min-w-0"
               />
-              <button type="submit" disabled={!input.trim() || isTyping} className="w-11 h-11 bg-blue-gradient rounded-xl flex items-center justify-center">
+              <button
+                type="submit"
+                disabled={!input.trim() || isTyping}
+                className="w-10 h-10 sm:w-11 sm:h-11 bg-blue-gradient rounded-xl flex items-center justify-center flex-shrink-0 ml-1 disabled:opacity-50 transition-opacity"
+              >
                 <Send className="text-white w-4 h-4" />
               </button>
             </form>
           </footer>
         </div>
 
-        {/* Persistent corner Main Menu (mobile + always accessible) */}
-        <button
-          type="button"
-          onClick={() => handleSend('Main Menu')}
-          className="sm:hidden fixed right-4 bottom-20 z-50 px-4 py-3 rounded-2xl bg-white/95 backdrop-blur border border-slate-200 shadow-[0_18px_40px_rgba(15,23,42,0.10)] text-slate-700 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 active:scale-[0.99]"
-          title="Return to Main Menu"
-        >
-          🔙 Main Menu
-        </button>
+        {/* Main Menu now lives in the header — no floating overlay needed */}
 
         {/* Sidebar */}
         <aside className="hidden lg:flex flex-col h-screen bg-white/55 p-8 space-y-6 border-l border-slate-200/70">
