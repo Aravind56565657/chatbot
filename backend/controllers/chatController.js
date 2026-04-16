@@ -5,9 +5,10 @@ const Appointment = require('../models/Appointment');
 const Doctor = require('../models/Doctor');
 const { format, addDays } = require('date-fns');
 
-// ─────────────────────────────────────────────────────────────────────────────
-// MAIN CHAT HANDLER
-// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * PRODUCTION CHAT CONTROLLER
+ * Handles core logic, DB persistence, and session lifecycle.
+ */
 exports.handleChat = async (req, res, next) => {
   const { sessionId, message } = req.body;
   try {
@@ -19,12 +20,10 @@ exports.handleChat = async (req, res, next) => {
 
     const lower = message.toLowerCase();
 
-    // 1. One-Shot Extraction Override (Bypass AIService for clean multi-field input)
-    // Removed specific one-shot block here to let AIService handle it via 'extractFieldsFromMessage' for better spec alignment
-
+    // AIService determines the next step and extracted data based on state machine
     const ai = await aiService.processUserMessage(message, session.conversationHistory, { ...session.extractedData, lastStep: session.lastStep, intent: session.intent }, services, doctors);
 
-    // FETCHING LOGIC (Matching Spec Names)
+    // ── DATA FETCHING LOGIC ──
     if (ai.nextStep === 'show_booking_list' || ai.nextStep === 'fetch_by_phone') {
         const ph = ai.extractedData?.userPhone;
         if (ph) {
@@ -34,10 +33,11 @@ exports.handleChat = async (req, res, next) => {
             
             if (list.length === 0) { 
                 const retryStep = (ai.intent === 'my_bookings' ? 'ask_phone' : (ai.intent === 'reschedule_appointment' ? 'ask_phone_reschedule' : 'ask_phone_cancel'));
-                ai.nextStep = retryStep; ai.responseMessage = "I apologize, but I couldn't find any active appointments for that number. Could you please check it again?";
-            }
-            else if (list.length === 1 && ai.nextStep !== 'show_booking_list') { ai.nextStep = 'show_found_card'; ai.appointment = list[0]; ai.extractedData.bookingId = list[0].bookingId; ai.extractedData.doctorName = list[0].doctorName; }
-            else { ai.nextStep = 'show_booking_list'; ai.appointments = list; }
+                ai.nextStep = retryStep; ai.responseMessage = "I apologize, but no active appointments were found. Please check your number and try again.";
+            } else if (list.length === 1 && ai.nextStep !== 'show_booking_list') { 
+                ai.nextStep = 'show_found_card'; ai.appointment = list[0]; ai.extractedData.bookingId = list[0].bookingId; 
+                ai.extractedData.doctorName = list[0].doctorName;
+            } else { ai.nextStep = 'show_booking_list'; ai.appointments = list; }
         }
     }
 
@@ -47,51 +47,63 @@ exports.handleChat = async (req, res, next) => {
             let a = null;
             if (global.isMongoConnected) a = await Appointment.findOne({ bookingId: id, status: 'confirmed' });
             else a = global.mockAppointments.find(x => x.bookingId === id && x.status === 'confirmed');
-            if (!a) { ai.nextStep = 'ask_booking_id'; ai.responseMessage = "That Booking ID was not found in our records. Please verify and retry."; }
+            if (!a) { ai.nextStep = 'ask_booking_id'; ai.responseMessage = "That Booking ID was not found. Please verify it."; }
             else { ai.nextStep = 'show_found_card'; ai.appointment = a; ai.extractedData.doctorName = a.doctorName; }
         }
     }
 
-    // TERMINAL ACTIONS (Matching Spec Names: show_confirm_card -> booking_confirmed)
+    // ── TERMINAL ACTIONS (Persistence) ──
     const isConfirm = lower.includes('confirm') || lower.includes('yes');
-    
-    // NEW SPEC STEP: show_confirm_card is for summary, booking_confirmed is for result
-    // When ai service returns 'booking_confirmed', we execute the save
+    let isFinished = false;
+
     if (ai.nextStep === 'booking_confirmed' && ai.action === 'confirm_booking') {
         const d = ai.extractedData;
         const bId = `APT-${Math.floor(1000 + Math.random() * 9000)}`;
         if (global.isMongoConnected) {
             const dateStr = d.date || format(new Date(), 'yyyy-MM-dd');
             const appointment = new Appointment({
-              bookingId: bId,
-              service: d.serviceCategory || "Clinical Consult",
+              bookingId: bId, sessionId,
+              service: d.serviceCategory || "Consultation",
               serviceCategory: d.serviceCategory || "General",
-              date: new Date(dateStr),
-              timeSlot: d.timeSlot || "09:00 AM",
-              userName: d.userName || "Guest",
-              userPhone: d.userPhone || "0000000000",
-              userAge: d.userAge,
-              userGender: d.userGender,
-              doctorName: d.doctorName,
-              doctorId: d.doctorId,
-              userEmail: d.userEmail,
-              sessionId: sessionId,
+              date: new Date(dateStr), timeSlot: d.timeSlot || "09:00 AM",
+              userName: d.userName || "Guest", userPhone: d.userPhone || "0000000000",
+              userAge: d.userAge, userGender: d.userGender,
+              doctorName: d.doctorName, doctorId: d.doctorId, userEmail: d.userEmail,
               status: 'confirmed'
             });
-            await appointment.save(); ai.bookingData = appointment;
+            await appointment.save(); 
+            ai.bookingData = appointment; // Final payload for frontend
         }
-        sessionStore.updateSession(sessionId, { extractedData: {}, lastStep: null, intent: null });
+        isFinished = true;
     }
 
-    // Cancellation (Strict ID use)
     if (ai.nextStep === 'booking_confirmed' && ai.action === 'cancellation_confirmed') {
         const bId = ai.extractedData?.bookingId;
         if (bId && global.isMongoConnected) await Appointment.findOneAndUpdate({ bookingId: bId }, { status: 'cancelled' });
-        sessionStore.updateSession(sessionId, { extractedData: {}, lastStep: null, intent: null });
+        isFinished = true;
     }
 
+    if (ai.nextStep === 'booking_confirmed' && ai.action === 'reschedule_confirmed') {
+        const bId = ai.extractedData?.bookingId;
+        if (bId && ai.extractedData.newDate && ai.extractedData.newTimeSlot) {
+            if (global.isMongoConnected) await Appointment.findOneAndUpdate({ bookingId: bId }, { date: new Date(ai.extractedData.newDate), timeSlot: ai.extractedData.newTimeSlot });
+        }
+        isFinished = true;
+    }
+
+    // ── SESSION MANAGEMENT ──
     session.conversationHistory.push({ role: 'user', text: message }, { role: 'assistant', text: ai.responseMessage, isBot: true });
-    sessionStore.updateSession(sessionId, { extractedData: ai.extractedData, intent: ai.intent, lastStep: ai.nextStep });
+    
+    if (isFinished) {
+        // PERMANENT RESET - No override permitted after this
+        sessionStore.updateSession(sessionId, { extractedData: {}, lastStep: null, intent: null });
+    } else {
+        sessionStore.updateSession(sessionId, { extractedData: ai.extractedData, intent: ai.intent, lastStep: ai.nextStep });
+    }
+
     res.json(ai);
-  } catch (err) { console.error(err); res.status(500).json({ responseMessage: "I encountered a snag while processing that request. Could we try one more time?" }); }
+  } catch (err) { 
+    console.error("FATAL ERROR:", err); 
+    res.status(500).json({ responseMessage: "I encountered a snag. Could you please try again?" }); 
+  }
 };

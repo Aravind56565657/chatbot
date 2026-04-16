@@ -1,8 +1,8 @@
 const { format, addDays } = require('date-fns');
 
 /**
- * ELITE CONCIERGE ENGINE - Spec-Compliant V6.
- * Zero-Typos. High Reliability. Strict Intent Detection.
+ * ELITE CONCIERGE ENGINE - Spec-Compliant V6.1.
+ * Fixed: Doctor-Specialty name collision and Session Reset continuity.
  */
 
 function runStateMachine(userMessage, sessionData) {
@@ -12,7 +12,7 @@ function runStateMachine(userMessage, sessionData) {
     
     // ── 1. HARD OVERRIDES ──
     if (msg === 'main menu' || msg === 'restart' || msg === 'restart flow' || msg === 'back to menu') {
-        return { intent: null, nextStep: 'show_intent_buttons', responseMessage: "Welcome back to our main menu. How may I assist you now?" };
+        return { intent: null, nextStep: 'show_intent_buttons', responseMessage: "Welcome back to our main menu. How may I assist you today?" };
     }
 
     const bId = extractBookingId(msg);
@@ -22,11 +22,10 @@ function runStateMachine(userMessage, sessionData) {
         return reply(data, 'fetch_by_id', `Locating appointment ${bId} in our records...`);
     }
 
-    // ── 2. INTENT DETECTION (Priority Order) ──
+    // ── 2. INTENT DETECTION ──
     const isConfirming = msg.includes('confirm') || msg.includes('yes') || msg.includes('this');
     const newIntent = detectIntent(msg);
 
-    // Only switch intent if we aren't confirming a current action
     if (newIntent && !isConfirming && newIntent !== sessionData.intent) {
         if (newIntent === 'book_appointment') return startBooking(resetData(data));
         if (newIntent === 'cancel_appointment') return startCancel(resetData(data));
@@ -48,16 +47,21 @@ function runStateMachine(userMessage, sessionData) {
         if (!data.serviceCategory) return reply(data, 'show_service_buttons', 'For which medical specialty would you like an appointment?');
         
         if (!data.doctorName) {
-            const dn = userMessage.replace(/select specialist|select|dr\./gi, '').trim();
-            if (dn.length > 3 && !extractTime(dn)) { data.doctorName = dn; return reply(data, 'ask_date', `Dr. ${dn} would be delighted to see you. For which date?`); }
+            const dn = userMessage.replace(/select specialist|select specialist|select|dr\./gi, '').trim();
+            // Refined: Ensure selecting a specialist is not confused with selecting the specialty again
+            const isSpecialtyClick = data.serviceCategory && dn.toLowerCase().includes(data.serviceCategory.toLowerCase());
+            if (dn.length > 3 && !extractTime(dn) && !isSpecialtyClick) { 
+                data.doctorName = dn; 
+                return reply(data, 'ask_date', `Dr. ${dn} would be delighted to see you. For which date?`); 
+            }
             return reply(data, 'show_doctor_cards', `Please select your preferred ${data.serviceCategory} specialist:`);
         }
         if (!data.date) { const d = detectDate(msg); if (d) { data.date = d; return reply(data, 'show_slots', `I've found availability for Dr. ${data.doctorName} on ${d}:`); } return reply(data, 'ask_date', `Which date should we book Dr. ${data.doctorName}?`); }
         if (!data.timeSlot) { const tm = extractTime(msg); if (tm) { data.timeSlot = tm; return reply(data, 'ask_name', `${tm} has been reserved. May I have the patient's full name?`); } return reply(data, 'show_slots', `Please pick a time slot for your visit on ${data.date}:`); }
-        if (!data.userName) { const n = userMessage.replace(/my name is|i am|this is|name is|for/gi, '').trim(); if (n.length > 2 && !msg.includes('select')) { data.userName = n; return reply(data, 'ask_age', `Thank you, ${n}. And what is the patient's age?`); } return reply(data, 'ask_name', "Could you please provide the patient's full legal name?"); }
+        if (!data.userName) { const n = userMessage.replace(/my name is|i am|this is|name is|for/gi, '').trim(); if (n.length > 2 && !msg.includes('select')) { data.userName = n; return reply(data, 'ask_age', `Thank you, ${n}. And the patient's age?`); } return reply(data, 'ask_name', "Could you please provide the patient's full legal name?"); }
         if (!data.userAge) { const a = msg.match(/\d+/)?.[0]; if (a) { data.userAge = Number(a); return reply(data, 'ask_gender', "Got it. And what is the patient's gender?"); } return reply(data, 'ask_age', `Please provide the age for ${data.userName}:`); }
         if (!data.userGender) { if (msg.includes('male') || msg.includes('female')) { data.userGender = msg.includes('female') ? 'Female' : 'Male'; return reply(data, 'ask_phone', "We're nearly done. May I have a contact phone number?"); } return reply(data, 'ask_gender', "Gender? (Male or Female)"); }
-        if (!data.userPhone) { const p = msg.replace(/\D/g, ''); if (p.length >= 10) { data.userPhone = p; return reply(data, 'ask_email', "Lastly, an email address for your confirmation?"); } return reply(data, 'ask_phone', "I will need a full 10-digit phone number:"); }
+        if (!data.userPhone) { const p = msg.replace(/\D/g, ''); if (p.length >= 10) { data.userPhone = p; return reply(data, 'ask_email', "Lastly, an email address for your confirmation?"); } return reply(data, 'ask_phone', "I'll need a full 10-digit number:"); }
         if (!data.userEmail) { if (msg.includes('@')) { data.userEmail = userMessage.trim(); return reply(data, 'show_confirm_card', "Excellent. Please review your summary below:", 'confirm_booking'); } return reply(data, 'ask_email', "Please provide a valid email address:"); }
         return reply(data, 'show_confirm_card', "Review your appointment summary below:", 'confirm_booking');
     }
@@ -75,7 +79,7 @@ function runStateMachine(userMessage, sessionData) {
     if (intent === 'reschedule_appointment') {
         if (lastStep === 'ask_phone_reschedule') { const p = msg.replace(/\D/g, ''); if (p.length >= 10) { data.userPhone = p; return reply(data, 'fetch_by_phone', 'Locating visit...'); } return reply(data, 'ask_phone_reschedule', 'Provide phone number:'); }
         if (lastStep === 'ask_new_date') { const d = detectDate(msg); if (d) { data.newDate = d; data.date = d; return reply(data, 'show_slots_reschedule', `Slots on ${d}:`); } return reply(data, 'ask_new_date', 'Which new date?'); }
-        if (lastStep === 'show_slots_reschedule') { const t = extractTime(msg); if (t) { data.newTimeSlot = t; return reply(data, 'show_reschedule_confirm', '', 'confirm_reschedule'); } }
+        if (lastStep === 'show_slots_reschedule') { const t = extractTime(msg); if (t) { data.newTimeSlot = t; return reply(data, 'show_reschedule_confirm', '', 'reschedule_confirmed'); } }
         if (lastStep === 'fetch_by_id' || lastStep === 'fetch_by_phone' || lastStep === 'show_found_card' || lastStep === 'show_booking_list') { if (msg.includes('reschedule')) return reply(data, 'ask_new_date', 'On which date?'); }
         return reply(data, 'ask_lookup_method', 'How should we locate the appointment you wish to reschedule?');
     }
