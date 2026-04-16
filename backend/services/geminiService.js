@@ -241,34 +241,50 @@ function runStateMachine(userMessage, sessionData) {
 
     // ── BOOK APPOINTMENT FLOW ──────────────────────────────────────────────────
     if (intent === 'book_appointment') {
-        if (!data.serviceCategory) { data.serviceCategory = extractCategory(msg); if (data.serviceCategory) return reply(data, 'show_doctor_cards', `Please select your specialist for ${data.serviceCategory}.`); }
-        if (data.serviceCategory && !data.doctorName && msg.includes('select')) {
-            data.doctorName = userMessage.replace(/select specialist|select/gi, '').trim();
-            return reply(data, 'ask_date', `Which date for ${data.doctorName}?`);
+        // Step 1: Category
+        if (!data.serviceCategory) {
+            data.serviceCategory = extractCategory(msg);
+            if (data.serviceCategory) return reply(data, 'show_doctor_cards', `Excellent. Please select your specialist for ${data.serviceCategory}.`);
+            return reply(data, 'show_service_buttons', 'Which specialty would you like to book?');
         }
+
+        // Step 2: Doctor
+        const isSelectingDoc = msg.includes('select') || msg.includes('doctor') || msg.includes('specialist') || msg.includes('dr.');
+        if (data.serviceCategory && (!data.doctorName || isSelectingDoc)) {
+            const docName = userMessage.replace(/select specialist|select|specialist/gi, '').trim();
+            if (docName.length > 3) {
+                data.doctorName = docName;
+                return reply(data, 'ask_date', `Great. Which date would you like to see ${docName}?`);
+            }
+            if (!data.doctorName) return reply(data, 'show_doctor_cards', `Please select your specialist for ${data.serviceCategory}.`);
+        }
+
+        // Step 3: Date
         if (data.doctorName && !data.date) {
             const d = detectDate(msg);
-            if (d) { data.date = d; return reply(data, 'show_slots', `Showing slots for ${data.doctorName} on ${d}:`); }
-            return reply(data, 'ask_date', 'Which date? (e.g., April 25, tomorrow)');
+            if (d) {
+                data.date = d;
+                return reply(data, 'show_slots', `Perfect. Please pick a time slot for ${data.doctorName} on ${d}:`);
+            }
+            return reply(data, 'ask_date', `Which date for ${data.doctorName}?`);
         }
+
+        // Step 4: Time Slot
         if (data.date && !data.timeSlot) {
             const t = extractTime(msg);
-            if (t) { data.timeSlot = t; return reply(data, 'ask_name', `Your slot at ${t} is reserved. May I have your full name?`); }
-        }
-        if (data.timeSlot && !data.userName && last === 'ask_name') {
-            data.userName = userMessage.replace(/my name is|i am|this is/gi, '').trim();
-            return reply(data, 'ask_age', `Thank you, ${data.userName}. How old are you?`);
-        }
-        if (data.userName && !data.userAge && last === 'ask_age') {
-            const age = msg.match(/\d+/)?.[0];
-            if (age) { data.userAge = age; return reply(data, 'ask_gender', `Got it. What is your gender?`); }
-        }
-        if (data.userAge && !data.userGender && last === 'ask_gender') {
-            if (msg.includes('male') || msg.includes('female') || msg.includes('other')) {
-                data.userGender = msg.includes('female') ? 'Female' : msg.includes('other') ? 'Other' : 'Male';
-                return reply(data, 'ask_phone', `Please provide your phone number:`);
+            if (t) {
+                data.timeSlot = t;
+                return reply(data, 'confirm_booking', "Please confirm your booking details:", 'confirm_booking');
             }
+            return reply(data, 'show_slots', `Please pick a slot for ${data.date}:`);
         }
+
+        // Final: Name, Age, etc (if not already extracted by one-shot)
+        if (data.timeSlot && !data.userName) return reply(data, 'confirm_booking', "I have your basic details. Please confirm the summary:", 'confirm_booking');
+
+        return reply(data, 'confirm_booking', "I've gathered your details! Please confirm below:", 'confirm_booking');
+    }
+
         if (data.userGender && !data.userPhone && last === 'ask_phone') {
             const phone = msg.replace(/\D/g, '');
             if (phone.length >= 10) {
