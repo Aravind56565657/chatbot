@@ -276,7 +276,7 @@ function runStateMachine(userMessage, sessionData) {
             const t = extractTime(msg);
             if (t) {
                 data.timeSlot = t;
-                return reply(data, 'confirm_booking', "Please confirm your booking details:", 'confirm_booking');
+                return reply(data, 'ask_name', `Your slot at ${t} is reserved. May I have your full name?`);
             }
             return reply(data, 'show_slots', `Please pick a slot for ${data.date}:`);
         }
