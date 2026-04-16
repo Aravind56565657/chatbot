@@ -130,13 +130,13 @@ exports.handleChat = async (req, res, next) => {
 
     const lowerMessage = message.toLowerCase();
 
-    // ── BACKEND SESSION RESET (Main Menu) ──────────────────────────────────
-    if (lowerMessage === 'main menu' || lowerMessage === 'restart' || lowerMessage === 'restart session') {
+    // ── BACKEND SESSION RESET (Main Menu / Restart) ────────────────────────
+    if (lowerMessage.includes('main menu') || lowerMessage.includes('restart') || lowerMessage.includes('start over')) {
       sessionStore.updateSession(sessionId, { extractedData: {}, lastStep: null, intent: null });
       return res.json({
         intent: null,
         nextStep: 'show_intent_buttons',
-        responseMessage: "Welcome back! What would you like to do now?"
+        responseMessage: "I've cleared your details. Let's start over! What would you like to do?"
       });
     }
 
