@@ -30,7 +30,7 @@ function runStateMachine(userMessage, sessionData) {
     }
 
     // Direct Intent Triggers
-    const isBooking = (msg.includes('book') || msg.includes('schedule') || msg.includes('reserve') || msg.includes('appointment')) && !msg.includes('cancel') && !msg.includes('reschedule');
+    const isBooking = (msg.includes('book') || msg.includes('schedule') || msg.includes('reserve') || msg.includes('appointment')) && !msg.includes('cancel') && !msg.includes('reschedule') && !msg.includes('confirm');
     if (isBooking) return startBooking(data);
     if (msg.includes('check availability') || msg.includes('is open') || msg.includes('any slot')) return startAvailability(data);
     if (msg.includes('cancel') && (msg.includes('appointment') || msg.includes('booking'))) return startCancel(data);
@@ -95,6 +95,13 @@ function runStateMachine(userMessage, sessionData) {
 
     // ── BOOK APPOINTMENT FLOW ─────────────────────────────────────────────────────
     if (intent === 'book_appointment') {
+        const isConfirming = msg.includes('confirm') || msg.includes('yes') || msg.includes('correct') || msg.includes('okay') || msg.includes('proceed');
+        
+        // Final Confirmation Step
+        if (last === 'confirm_booking' && isConfirming) {
+             return reply(data, 'booking_success', 'Booking confirmed!', 'confirm_booking');
+        }
+
         // Step 1: Specialty
         if (!data.serviceCategory) {
             data.serviceCategory = extractCategory(msg);
