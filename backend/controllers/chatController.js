@@ -13,50 +13,67 @@ const { format, addDays } = require('date-fns');
 function smartExtractBooking(message) {
   const msg = message.toLowerCase();
 
-  // Must look like a booking request
+  // Robust Intent Detection
   const hasBookingIntent = msg.includes('book') || msg.includes('appointment') ||
-                           msg.includes('schedule') || msg.includes('reserve');
-  if (!hasBookingIntent) return null;
+                           msg.includes('schedule') || msg.includes('reserve') ||
+                           msg.includes('see a') || msg.includes('need a');
+  
+  // Categorical Keywords
+  const categoryMap = {
+    'cardio': 'Cardiology',
+    'heart': 'Cardiology',
+    'dent': 'Dental',
+    'tooth': 'Dental',
+    'teeth': 'Dental',
+    'eye': 'Eye Care',
+    'opht': 'Eye Care',
+    'vision': 'Eye Care',
+    'neuro': 'Neurology',
+    'brain': 'Neurology',
+    'ortho': 'Orthopedics',
+    'bone': 'Orthopedics',
+    'joint': 'Orthopedics'
+  };
 
-  const result = {};
+  let detectedCategory = null;
+  for (const [key, val] of Object.entries(categoryMap)) {
+    if (msg.includes(key)) {
+      detectedCategory = val;
+      break;
+    }
+  }
 
-  // ── Category ──────────────────────────────────────────────────────────────
-  if (msg.includes('cardiology'))                       result.serviceCategory = 'Cardiology';
-  else if (msg.includes('dental'))                      result.serviceCategory = 'Dental';
-  else if (msg.includes('eye care') || msg.includes('eye')) result.serviceCategory = 'Eye Care';
-  else if (msg.includes('neurology'))                   result.serviceCategory = 'Neurology';
-  else if (msg.includes('orthopedics'))                 result.serviceCategory = 'Orthopedics';
+  // If we have a category, we assume booking intent if none was clear
+  if (!detectedCategory && !hasBookingIntent) return null;
 
-  // ── Date ──────────────────────────────────────────────────────────────────
+  const result = { serviceCategory: detectedCategory };
+
+  // ── Date (handles typos like tommorow) ──────────────────────────────────
   const now = new Date();
-  if (msg.includes('tomorrow'))      result.date = format(addDays(now, 1), 'yyyy-MM-dd');
-  else if (msg.includes('today'))    result.date = format(now, 'yyyy-MM-dd');
-  else {
-    // "April 25", "May 3" etc.
-    const months = ['january','february','march','april','may','june','july',
-                    'august','september','october','november','december'];
+  if (msg.includes('tomorrow') || msg.includes('tommorow') || msg.includes('tomoro')) {
+     result.date = format(addDays(now, 1), 'yyyy-MM-dd');
+  } else if (msg.includes('today')) {
+    result.date = format(now, 'yyyy-MM-dd');
+  } else {
+    // ... search for month names etc
+    const months = ['january','february','march','april','may','june','july','august','september','october','november','december'];
     for (let i = 0; i < months.length; i++) {
       if (msg.includes(months[i])) {
-        const dayMatch = msg.match(new RegExp(`${months[i]}\\s+(\\d{1,2})`))?.[1] ||
-                         msg.match(/\d+/)?.[0];
-        if (dayMatch) {
-          result.date = `${now.getFullYear()}-${String(i+1).padStart(2,'0')}-${String(dayMatch).padStart(2,'0')}`;
-        }
+        const dayMatch = msg.match(new RegExp(`${months[i]}\\s+(\\d{1,2})`))?.[1] || msg.match(/\d+/)?.[0];
+        if (dayMatch) result.date = `${now.getFullYear()}-${String(i+1).padStart(2,'0')}-${String(dayMatch).padStart(2,'0')}`;
         break;
       }
     }
-    // yyyy-mm-dd
-    const iso = msg.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
-    if (iso) result.date = `${iso[1]}-${iso[2]}-${iso[3]}`;
   }
 
-  // ── Time → normalize to SlotGrid format "H:00 AM/PM" ─────────────────────
-  const timeMatch = msg.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i);
+  // ── Time ──────────────────────────────────────────────────────────────────
+  const timeMatch = msg.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i) || msg.match(/(\d{1,2})\s*(am|pm)/i);
   if (timeMatch) {
     const hour = parseInt(timeMatch[1]);
-    const period = timeMatch[3].toUpperCase();
+    const period = (timeMatch[3] || timeMatch[2]).toUpperCase();
     result.requestedTime = `${hour}:00 ${period}`;
   }
+
 
   // ── Patient name ──────────────────────────────────────────────────────────
   // "named X", "patient X", "name is X", "patient named X"

@@ -37,12 +37,12 @@ function runStateMachine(userMessage, sessionData) {
         }
     }
 
-    if (msg === 'book appointment')   return startBooking(data);
-    if (msg === 'check availability') return startAvailability(data);
-    if (msg === 'cancel appointment') return startCancel(data);
-    if (msg === 'reschedule')         return startReschedule(data);
-    if (msg === 'general inquiry')    return startInquiry(data);
-    if (msg === 'my bookings')        return startMyBookings(data);
+    if (msg.includes('book appointment') || msg.includes('schedule appointment') || msg.includes('book an appointment')) return startBooking(data);
+    if (msg.includes('check availability') || msg.includes('is open') || msg.includes('any slot')) return startAvailability(data);
+    if (msg.includes('cancel appointment') || msg.includes('cancel my')) return startCancel(data);
+    if (msg.includes('reschedule'))         return startReschedule(data);
+    if (msg.includes('general inquiry') || msg.includes('have a question'))    return startInquiry(data);
+    if (msg.includes('my bookings') || msg.includes('my appointment'))        return startMyBookings(data);
 
     // ── CANCEL FLOW ────────────────────────────────────────────────────────────
     if (intent === 'cancel_appointment') {
