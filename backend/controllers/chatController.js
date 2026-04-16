@@ -130,16 +130,24 @@ exports.handleChat = async (req, res, next) => {
 
     const lowerMessage = message.toLowerCase();
 
-    // ── SMART ONE-SHOT BOOKING ──────────────────────────────────────────────
-    // Only try this when the user has no active intent (fresh session or main menu)
-    const isFreshSession = !session.intent || session.intent === '';
-    if (isFreshSession) {
-      const oneShotData = smartExtractBooking(message);
+    // ── BACKEND SESSION RESET (Main Menu) ──────────────────────────────────
+    if (lowerMessage === 'main menu' || lowerMessage === 'restart' || lowerMessage === 'restart session') {
+      sessionStore.updateSession(sessionId, { extractedData: {}, lastStep: null, intent: null });
+      return res.json({
+        intent: null,
+        nextStep: 'show_intent_buttons',
+        responseMessage: "Welcome back! What would you like to do now?"
+      });
+    }
 
-      if (oneShotData) {
+    // ── SMART ONE-SHOT BOOKING ──────────────────────────────────────────────
+    // Check for "One-Shot" even if session has an intent, to allow "overriding" with new data.
+    const oneShotData = smartExtractBooking(message);
+
+    if (oneShotData && (Object.keys(oneShotData).length > 2 || oneShotData.serviceCategory)) {
         oneShotData.intent = 'book_appointment';
 
-        // 1. Pick a doctor for the requested specialty (if category exists)
+        // 1. Pick a doctor for the requested specialty
         let chosenDoctor = null;
         if (oneShotData.serviceCategory) {
           const specialtyDoctors = doctors.filter(d =>
@@ -170,82 +178,51 @@ exports.handleChat = async (req, res, next) => {
           }
 
           const isSlotAvailable = !takenSlots.includes(oneShotData.requestedTime);
-
           if (isSlotAvailable) {
             oneShotData.timeSlot = oneShotData.requestedTime;
-            sessionStore.updateSession(sessionId, {
-              extractedData: oneShotData,
-              intent: 'book_appointment',
-              lastStep: 'confirm_booking'
-            });
-            session.conversationHistory.push({ role: 'user', text: message });
-            session.conversationHistory.push({ role: 'assistant', text: "Summary card shown.", isBot: true });
+            sessionStore.updateSession(sessionId, { extractedData: oneShotData, intent: 'book_appointment', lastStep: 'confirm_booking' });
+            session.conversationHistory.push({ role: 'user', text: message }, { role: 'assistant', text: "Summary shown.", isBot: true });
             return res.json({
               intent: 'book_appointment', nextStep: 'confirm_booking', action: 'confirm_booking',
-              extractedData: oneShotData, responseMessage: "I've gathered your details! Please confirm your booking summary:"
+              extractedData: oneShotData, responseMessage: `Understood! I've prepared a booking summary for ${oneShotData.doctorName} on ${oneShotData.date} at ${oneShotData.timeSlot}. Please confirm:`
             });
           } else {
-            sessionStore.updateSession(sessionId, {
-              extractedData: oneShotData,
-              intent: 'book_appointment',
-              lastStep: 'show_slots'
-            });
-            session.conversationHistory.push({ role: 'user', text: message });
-            session.conversationHistory.push({ role: 'assistant', text: "Slot taken.", isBot: true });
-            return res.json({
-              intent: 'book_appointment', nextStep: 'show_slots', action: null,
-              extractedData: oneShotData, responseMessage: `The ${oneShotData.requestedTime} slot is busy. Please pick another one for ${oneShotData.date}:`
-            });
+             sessionStore.updateSession(sessionId, { extractedData: oneShotData, intent: 'book_appointment', lastStep: 'show_slots' });
+             session.conversationHistory.push({ role: 'user', text: message }, { role: 'assistant', text: "Slot busy.", isBot: true });
+             return res.json({
+               intent: 'book_appointment', nextStep: 'show_slots', action: null,
+               extractedData: oneShotData, responseMessage: `The ${oneShotData.requestedTime} slot is busy. Here are other available slots for ${oneShotData.doctorName} on ${oneShotData.date}:`
+             });
           }
         }
 
-        // 3. Have category + doctor + date but NO time? → Show slots
+        // 3. Category + Date but NO Time/Doctor? → Show slots
         if (oneShotData.date && chosenDoctor) {
-           sessionStore.updateSession(sessionId, {
-              extractedData: oneShotData,
-              intent: 'book_appointment',
-              lastStep: 'show_slots'
-            });
-            session.conversationHistory.push({ role: 'user', text: message });
-            session.conversationHistory.push({ role: 'assistant', text: "Slots shown.", isBot: true });
+            sessionStore.updateSession(sessionId, { extractedData: oneShotData, intent: 'book_appointment', lastStep: 'show_slots' });
+            session.conversationHistory.push({ role: 'user', text: message }, { role: 'assistant', text: "Slots shown.", isBot: true });
             return res.json({
               intent: 'book_appointment', nextStep: 'show_slots', action: null,
-              extractedData: oneShotData, responseMessage: `Great! Please pick a time slot for ${oneShotData.doctorName} on ${oneShotData.date}:`
+              extractedData: oneShotData, responseMessage: `Got it. Please pick a time for ${oneShotData.doctorName} on ${oneShotData.date}:`
             });
         }
 
-        // 4. Have category but NO doctor/date? → Show doctors
+        // 4. Have Category but NO Doctor? → Show doctors
         if (oneShotData.serviceCategory) {
-            sessionStore.updateSession(sessionId, {
-              extractedData: oneShotData,
-              intent: 'book_appointment',
-              lastStep: 'show_doctor_cards'
-            });
-            session.conversationHistory.push({ role: 'user', text: message });
-            session.conversationHistory.push({ role: 'assistant', isBot: true });
+            sessionStore.updateSession(sessionId, { extractedData: oneShotData, intent: 'book_appointment', lastStep: 'show_doctor_cards' });
+            session.conversationHistory.push({ role: 'user', text: message }, { role: 'assistant', isBot: true });
             return res.json({
               intent: 'book_appointment', nextStep: 'show_doctor_cards', action: null,
-              extractedData: oneShotData, responseMessage: `Which specialist would you like to see for ${oneShotData.serviceCategory}?`
+              extractedData: oneShotData, responseMessage: `Excellent! Which Cardiology specialist would you like to consult with?`
             });
         }
 
-        // 5. NO Category yet? → Show specialty buttons
-        // This handles "book a doctor appointment tomorrow 2pm"
-        sessionStore.updateSession(sessionId, {
-          extractedData: oneShotData,
-          intent: 'book_appointment',
-          lastStep: 'show_service_buttons'
-        });
-        session.conversationHistory.push({ role: 'user', text: message });
-        session.conversationHistory.push({ role: 'assistant', isBot: true });
+        // 5. General Booking Intent? (but no details)
+        sessionStore.updateSession(sessionId, { extractedData: oneShotData, intent: 'book_appointment', lastStep: 'show_service_buttons' });
+        session.conversationHistory.push({ role: 'user', text: message }, { role: 'assistant', isBot: true });
         return res.json({
-          intent: 'book_appointment',
-          nextStep: 'show_service_buttons',
-          action: null,
-          extractedData: oneShotData,
-          responseMessage: "I see you'd like to book an appointment! Which specialty would you like to book for?"
+            intent: 'book_appointment', nextStep: 'show_service_buttons', action: null,
+            extractedData: oneShotData, responseMessage: "Happy to help! Which medical specialty do you need an appointment for?"
         });
-      }
     }
 
     // ── STANDARD FLOW → State Machine + AI ─────────────────────────────────
