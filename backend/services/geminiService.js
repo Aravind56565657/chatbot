@@ -24,7 +24,7 @@ function runStateMachine(userMessage, sessionData) {
         return { intent: null, nextStep: 'show_intent_buttons', responseMessage: "Main Menu reset. How can I assist you today?" };
     }
 
-    const isBooking = (msg.includes('book') || msg.includes('appointment')) && !msg.includes('cancel') && !msg.includes('reschedule') && !msg.includes('confirm');
+    const isBooking = (msg.includes('book') || msg.includes('appointment')) && !msg.includes('cancel') && !msg.includes('reschedule') && !msg.includes('confirm') && !msg.includes('my') && !msg.includes('your');
     if (isBooking) return startBooking(data);
     if (msg.includes('cancel') && (msg.includes('appointment') || msg.includes('booking'))) return startCancel(data);
     if (msg.includes('reschedule')) return startReschedule(data);
