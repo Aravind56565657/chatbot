@@ -37,7 +37,10 @@ function runStateMachine(userMessage, sessionData) {
         }
     }
 
-    if (msg.includes('book appointment') || msg.includes('schedule appointment') || msg.includes('book an appointment')) return startBooking(data);
+    const isBooking = msg.includes('book') || msg.includes('schedule') || msg.includes('reserve');
+    const isAppt    = msg.includes('appointment') || msg.includes('slot') || msg.includes('see a doctor');
+    
+    if (isBooking && isAppt) return startBooking(data);
     if (msg.includes('check availability') || msg.includes('is open') || msg.includes('any slot')) return startAvailability(data);
     if (msg.includes('cancel appointment') || msg.includes('cancel my')) return startCancel(data);
     if (msg.includes('reschedule'))         return startReschedule(data);

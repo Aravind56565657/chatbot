@@ -136,122 +136,115 @@ exports.handleChat = async (req, res, next) => {
     if (isFreshSession) {
       const oneShotData = smartExtractBooking(message);
 
-      if (oneShotData && oneShotData.serviceCategory) {
-        // Pick a doctor for the requested specialty
-        const specialtyDoctors = doctors.filter(d =>
-          d.serviceCategory === oneShotData.serviceCategory ||
-          d.specialization === oneShotData.serviceCategory ||
-          (d.specialization && d.specialization.includes(oneShotData.serviceCategory))
-        );
-        let chosenDoctor = specialtyDoctors.length > 0
-          ? specialtyDoctors[Math.floor(Math.random() * specialtyDoctors.length)]
-          : null;
+      if (oneShotData) {
+        oneShotData.intent = 'book_appointment';
 
-        if (chosenDoctor) {
-          oneShotData.doctorName = chosenDoctor.name;
-          oneShotData.doctorId   = chosenDoctor._id.toString();
+        // 1. Pick a doctor for the requested specialty (if category exists)
+        let chosenDoctor = null;
+        if (oneShotData.serviceCategory) {
+          const specialtyDoctors = doctors.filter(d =>
+            d.serviceCategory === oneShotData.serviceCategory ||
+            d.specialization === oneShotData.serviceCategory ||
+            (d.specialization && d.specialization.includes(oneShotData.serviceCategory))
+          );
+          if (specialtyDoctors.length > 0) {
+            chosenDoctor = specialtyDoctors[Math.floor(Math.random() * specialtyDoctors.length)];
+            oneShotData.doctorName = chosenDoctor.name;
+            oneShotData.doctorId   = chosenDoctor._id.toString();
+          }
         }
 
-        // If we have date + time preference, check availability
+        // 2. If we have category + date + time + doctor → Check availability
         if (oneShotData.date && chosenDoctor && oneShotData.requestedTime) {
           let takenSlots = [];
           if (global.isMongoConnected) {
-            const existing = await Appointment.find({
-              doctorId: oneShotData.doctorId,
-              date: {
-                $gte: new Date(`${oneShotData.date}T00:00:00.000Z`),
-                $lte: new Date(`${oneShotData.date}T23:59:59.999Z`),
-              },
-              status: { $ne: 'cancelled' }
-            });
-            takenSlots = existing.map(a => a.timeSlot);
+             const existing = await Appointment.find({
+               doctorId: oneShotData.doctorId,
+               date: {
+                 $gte: new Date(`${oneShotData.date}T00:00:00.000Z`),
+                 $lte: new Date(`${oneShotData.date}T23:59:59.999Z`),
+               },
+               status: { $ne: 'cancelled' }
+             });
+             takenSlots = existing.map(a => a.timeSlot);
           }
 
-          const requestedTime = oneShotData.requestedTime; // e.g. "2:00 PM"
-          const isSlotAvailable = !takenSlots.includes(requestedTime);
+          const isSlotAvailable = !takenSlots.includes(oneShotData.requestedTime);
 
           if (isSlotAvailable) {
-            // ✅ Slot is free → show confirm card immediately
-            oneShotData.timeSlot = requestedTime;
-            oneShotData.intent   = 'book_appointment';
-
+            oneShotData.timeSlot = oneShotData.requestedTime;
             sessionStore.updateSession(sessionId, {
               extractedData: oneShotData,
               intent: 'book_appointment',
               lastStep: 'confirm_booking'
             });
             session.conversationHistory.push({ role: 'user', text: message });
-            session.conversationHistory.push({ role: 'assistant', text: "Here's your booking summary!", isBot: true });
-
+            session.conversationHistory.push({ role: 'assistant', text: "Summary card shown.", isBot: true });
             return res.json({
-              intent: 'book_appointment',
-              nextStep: 'confirm_booking',
-              action: 'confirm_booking',
-              extractedData: oneShotData,
-              responseMessage: `I've gathered all your details! Here's your booking summary — please confirm:`
+              intent: 'book_appointment', nextStep: 'confirm_booking', action: 'confirm_booking',
+              extractedData: oneShotData, responseMessage: "I've gathered your details! Please confirm your booking summary:"
             });
-
           } else {
-            // ❌ Slot is taken → show available slots with context message
-            oneShotData.intent = 'book_appointment';
-
             sessionStore.updateSession(sessionId, {
               extractedData: oneShotData,
               intent: 'book_appointment',
               lastStep: 'show_slots'
             });
             session.conversationHistory.push({ role: 'user', text: message });
-            session.conversationHistory.push({ role: 'assistant', text: `That slot is taken. Here are available slots.`, isBot: true });
-
+            session.conversationHistory.push({ role: 'assistant', text: "Slot taken.", isBot: true });
             return res.json({
-              intent: 'book_appointment',
-              nextStep: 'show_slots',
-              action: null,
-              extractedData: oneShotData,
-              responseMessage: `The ${requestedTime} slot with ${oneShotData.doctorName} on ${oneShotData.date} isn't available. Here are the open slots — please pick one:`
+              intent: 'book_appointment', nextStep: 'show_slots', action: null,
+              extractedData: oneShotData, responseMessage: `The ${oneShotData.requestedTime} slot is busy. Please pick another one for ${oneShotData.date}:`
             });
           }
         }
 
-        // Have category + date but no time preference → show slots
+        // 3. Have category + doctor + date but NO time? → Show slots
         if (oneShotData.date && chosenDoctor) {
-          oneShotData.intent = 'book_appointment';
-
-          sessionStore.updateSession(sessionId, {
-            extractedData: oneShotData,
-            intent: 'book_appointment',
-            lastStep: 'show_slots'
-          });
-          session.conversationHistory.push({ role: 'user', text: message });
-          session.conversationHistory.push({ role: 'assistant', text: `Here are the available slots.`, isBot: true });
-
-          return res.json({
-            intent: 'book_appointment',
-            nextStep: 'show_slots',
-            action: null,
-            extractedData: oneShotData,
-            responseMessage: `Happy to help! I've selected ${oneShotData.doctorName} for ${oneShotData.serviceCategory}. Please pick your preferred time slot for ${oneShotData.date}:`
-          });
+           sessionStore.updateSession(sessionId, {
+              extractedData: oneShotData,
+              intent: 'book_appointment',
+              lastStep: 'show_slots'
+            });
+            session.conversationHistory.push({ role: 'user', text: message });
+            session.conversationHistory.push({ role: 'assistant', text: "Slots shown.", isBot: true });
+            return res.json({
+              intent: 'book_appointment', nextStep: 'show_slots', action: null,
+              extractedData: oneShotData, responseMessage: `Great! Please pick a time slot for ${oneShotData.doctorName} on ${oneShotData.date}:`
+            });
         }
 
-        // Have category but no doctor (MongoDB offline) → walk them through
-        if (oneShotData.serviceCategory && !chosenDoctor) {
-          oneShotData.intent = 'book_appointment';
-          sessionStore.updateSession(sessionId, {
-            extractedData: oneShotData,
-            intent: 'book_appointment',
-            lastStep: 'show_doctor_cards'
-          });
-          session.conversationHistory.push({ role: 'user', text: message });
-          session.conversationHistory.push({ role: 'assistant', isBot: true });
-          return res.json({
-            intent: 'book_appointment',
-            nextStep: 'show_doctor_cards',
-            action: null,
-            extractedData: oneShotData,
-            responseMessage: `Great! Please select a specialist for ${oneShotData.serviceCategory}:`
-          });
+        // 4. Have category but NO doctor/date? → Show doctors
+        if (oneShotData.serviceCategory) {
+            sessionStore.updateSession(sessionId, {
+              extractedData: oneShotData,
+              intent: 'book_appointment',
+              lastStep: 'show_doctor_cards'
+            });
+            session.conversationHistory.push({ role: 'user', text: message });
+            session.conversationHistory.push({ role: 'assistant', isBot: true });
+            return res.json({
+              intent: 'book_appointment', nextStep: 'show_doctor_cards', action: null,
+              extractedData: oneShotData, responseMessage: `Which specialist would you like to see for ${oneShotData.serviceCategory}?`
+            });
         }
+
+        // 5. NO Category yet? → Show specialty buttons
+        // This handles "book a doctor appointment tomorrow 2pm"
+        sessionStore.updateSession(sessionId, {
+          extractedData: oneShotData,
+          intent: 'book_appointment',
+          lastStep: 'show_service_buttons'
+        });
+        session.conversationHistory.push({ role: 'user', text: message });
+        session.conversationHistory.push({ role: 'assistant', isBot: true });
+        return res.json({
+          intent: 'book_appointment',
+          nextStep: 'show_service_buttons',
+          action: null,
+          extractedData: oneShotData,
+          responseMessage: "I see you'd like to book an appointment! Which specialty would you like to book for?"
+        });
       }
     }
 
