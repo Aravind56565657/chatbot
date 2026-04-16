@@ -1,21 +1,21 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Hash, Calendar } from 'lucide-react';
+import { Hash, Calendar, Phone, User } from 'lucide-react';
 
 const statusBadgeClasses = (status) => {
   switch ((status || '').toLowerCase()) {
     case 'confirmed':
-      return 'bg-green-500/20 text-green-400 border-green-500/30';
+      return 'bg-green-50 text-green-600 border-green-200';
     case 'pending':
-      return 'bg-amber-500/20 text-amber-400 border-amber-500/30';
+      return 'bg-amber-50 text-amber-600 border-amber-200';
     case 'cancelled':
-      return 'bg-red-500/20 text-red-400 border-red-500/30';
+      return 'bg-red-50 text-red-600 border-red-200';
     case 'rescheduled':
-      return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
+      return 'bg-purple-50 text-purple-600 border-purple-200';
     case 'completed':
-      return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+      return 'bg-blue-50 text-blue-600 border-blue-200';
     default:
-      return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
+      return 'bg-slate-100 text-slate-500 border-slate-200';
   }
 };
 
@@ -38,9 +38,9 @@ const RescheduleAppointmentsMiniList = ({ appointments, onSelectReschedule }) =>
 
   return (
     <div className="space-y-3 w-full max-w-[360px] mt-4">
-      <h3 className="text-xs font-black text-gray-500 uppercase tracking-[0.2em] px-2 flex items-center justify-between">
+      <h3 className="text-xs font-black text-slate-500 uppercase tracking-[0.2em] px-2 flex items-center justify-between">
         <span>Your Appointments</span>
-        <span className="bg-blue-500/10 text-blue-400 h-5 px-2 rounded-full text-[9px] flex items-center">
+        <span className="bg-blue-50 text-blue-600 h-5 px-2 rounded-full text-[9px] flex items-center border border-blue-100">
           {appointments.length} found
         </span>
       </h3>
@@ -53,28 +53,39 @@ const RescheduleAppointmentsMiniList = ({ appointments, onSelectReschedule }) =>
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: idx * 0.05 }}
-            className="glass-card rounded-2xl p-4 border border-white/5"
+            className="glass-card rounded-[24px] p-4 border border-slate-200 bg-white"
           >
             <div className="space-y-2">
               <div className="flex items-center space-x-2">
-                <span className="p-1.5 bg-blue-500/10 rounded-lg">
-                  <Hash className="w-3 h-3 text-blue-400" />
+                <span className="p-1.5 bg-blue-50 rounded-lg border border-blue-100">
+                  <Hash className="w-3 h-3 text-blue-500" />
                 </span>
-                <span className="text-[10px] font-black tracking-widest text-white/60">{apt.bookingId}</span>
+                <span className="text-[10px] font-black tracking-widest text-slate-500">{apt.bookingId}</span>
               </div>
 
-              <div className="flex items-center text-xs font-bold text-white">
+              <div className="flex items-center text-xs font-bold text-slate-900">
                 <span className="mr-2">
                   {apt.serviceCategory === 'Dental' ? '🦷' : apt.serviceCategory === 'Cardiology' ? '🫀' : '🏥'}
                 </span>
                 <span className="truncate">{apt.serviceCategory} · {apt.doctorName}</span>
               </div>
 
-              <div className="flex items-center text-[10px] font-medium text-gray-400">
+              <div className="flex items-center text-[10px] font-medium text-slate-500">
                 <Calendar className="w-3 h-3 mr-2 text-blue-500" />
                 <span>
                   {formatDateLabel(apt.date)} · {displayTime(apt.timeSlot)}
                 </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <div className="flex items-center text-[10px] text-slate-500">
+                  <User className="w-3 h-3 mr-2 text-slate-400" />
+                  <span className="truncate">{apt.userName || 'Guest'}</span>
+                </div>
+                <div className="flex items-center text-[10px] text-slate-500">
+                  <Phone className="w-3 h-3 mr-2 text-slate-400" />
+                  <span>{apt.userPhone || '—'}</span>
+                </div>
               </div>
 
               <div className="flex items-center justify-between mt-2">
@@ -87,7 +98,7 @@ const RescheduleAppointmentsMiniList = ({ appointments, onSelectReschedule }) =>
             <div className="mt-3">
               <button
                 onClick={() => onSelectReschedule && onSelectReschedule(apt)}
-                className="w-full py-2 bg-white/5 hover:bg-white/10 text-[10px] font-bold text-blue-400 rounded-lg transition-colors border border-white/10"
+                className="w-full py-2.5 bg-blue-50 hover:bg-blue-100 text-[10px] font-bold text-blue-600 rounded-lg transition-colors border border-blue-200"
               >
                 Select to Reschedule
               </button>
