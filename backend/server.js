@@ -29,6 +29,14 @@ global.mockServices = [
   { _id: "s4", name: "Specialist Consultation", category: "Medical", duration: 45, price: 800, description: "Subject specialist.", isActive: true },
 ];
 
+global.mockDoctors = [
+  { _id: "661f8a84c8a2c8a2c8a2c8a1", name: "Dr. Kavya Reddy", specialization: "Cardiologist", serviceCategory: "Cardiology", isActive: true },
+  { _id: "661f8a84c8a2c8a2c8a2c8a2", name: "Dr. Anirudh Sharma", specialization: "Dentist", serviceCategory: "Dental", isActive: true },
+  { _id: "661f8a84c8a2c8a2c8a2c8a3", name: "Dr. Meera Krishnan", specialization: "Ophthalmologist", serviceCategory: "Eye Care", isActive: true },
+  { _id: "661f8a84c8a2c8a2c8a2c8a4", name: "Dr. Sameer Verma", specialization: "Neurologist", serviceCategory: "Neurology", isActive: true },
+  { _id: "661f8a84c8a2c8a2c8a2c8a5", name: "Dr. Rajesh Gupta", specialization: "Orthopedic Surgeon", serviceCategory: "Orthopedics", isActive: true }
+];
+
 // Middleware
 app.use(cors({
   origin: function (origin, callback) {

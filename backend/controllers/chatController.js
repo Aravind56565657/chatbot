@@ -105,10 +105,11 @@ exports.handleChat = async (req, res, next) => {
     if (global.isMongoConnected) {
       services = await Service.find({ isActive: true });
       doctors = await Doctor.find({ isActive: true });
-    } else {
-      services = global.mockServices;
-      doctors = [];
     }
+
+    // Fallback to mock data if DB is empty or disconnected
+    if (services.length === 0) services = global.mockServices;
+    if (doctors.length === 0)  doctors  = global.mockDoctors;
 
     const lowerMessage = message.toLowerCase();
 
@@ -121,8 +122,9 @@ exports.handleChat = async (req, res, next) => {
       if (oneShotData && oneShotData.serviceCategory) {
         // Pick a doctor for the requested specialty
         const specialtyDoctors = doctors.filter(d =>
-          d.category === oneShotData.serviceCategory ||
-          d.specialty === oneShotData.serviceCategory
+          d.serviceCategory === oneShotData.serviceCategory ||
+          d.specialization === oneShotData.serviceCategory ||
+          (d.specialization && d.specialization.includes(oneShotData.serviceCategory))
         );
         let chosenDoctor = specialtyDoctors.length > 0
           ? specialtyDoctors[Math.floor(Math.random() * specialtyDoctors.length)]
