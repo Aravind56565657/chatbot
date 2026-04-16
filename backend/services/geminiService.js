@@ -16,23 +16,18 @@ function runStateMachine(userMessage, sessionData) {
     let   intent = sessionData.intent || '';
 
     // ── TOP-LEVEL INTENT TRIGGERS (always override mid-flow) ──────────────────
-    // Freeform bookingId shortcuts (skip lookup-method buttons)
     const bookingId = extractBookingId(msg);
     if (bookingId) {
         if (msg.includes('cancel')) {
             data.intent = 'cancel_appointment';
             data.bookingId = bookingId;
             data.lookupMethod = 'bookingId';
-            data.shortcutCancelFromMyBookings = msg.includes('cancel booking');
-            data.cancelFromMyBookings = msg.includes('cancel booking');
             return reply(data, 'fetch_by_id', 'Looking up your appointment...');
         }
         if (msg.includes('reschedule')) {
             data.intent = 'reschedule_appointment';
             data.bookingId = bookingId;
             data.lookupMethod = 'bookingId';
-            data.shortcutRescheduleFromMyBookings = msg.includes('reschedule booking');
-            data.rescheduleFromMyBookings = msg.includes('reschedule booking');
             return reply(data, 'fetch_by_id', 'Looking up your appointment...');
         }
     }
@@ -72,30 +67,16 @@ function runStateMachine(userMessage, sessionData) {
             return reply(data, 'fetch_by_id', 'Looking up your appointment...');
         }
         if (last === 'fetch_by_id') {
-            if (msg.includes('try again')) {
-                return reply(data, 'ask_booking_id', 'Please enter your Booking ID (e.g. APT-9281)');
-            }
-            if (msg.includes('search by phone')) {
-                data.lookupMethod = 'phone';
-                return reply(data, 'ask_phone_cancel', 'Please enter your registered phone number');
-            }
+            if (msg.includes('try again')) return reply(data, 'ask_booking_id', 'Please enter your Booking ID (e.g. APT-9281)');
+            if (msg.includes('phone') || msg.includes('search by phone')) { data.lookupMethod = 'phone'; return reply(data, 'ask_phone_cancel', 'Please enter your registered phone number'); }
         }
         if (last === 'fetch_by_phone') {
-            if (msg.includes('try again')) {
-                return reply(data, 'ask_phone_cancel', 'Please enter your registered phone number');
-            }
-            if (msg.includes('book new appointment')) {
-                return reply(data, 'show_intent_buttons', 'Sure! Let\'s book a new appointment.');
-            }
+            if (msg.includes('try again')) return reply(data, 'ask_phone_cancel', 'Please enter your registered phone number');
+            if (msg.includes('book new appointment')) return reply(data, 'show_intent_buttons', 'Sure! Let\'s book a new appointment.');
         }
         if (last === 'show_found_card' || last === 'fetch_by_phone' || last === 'fetch_by_id') {
             if (msg.includes('yes') || msg.includes('confirm') || msg.includes('cancel')) {
-                return reply(
-                    data,
-                    'confirm_cancel_final',
-                    '',
-                    'confirm_cancellation'
-                );
+                return reply(data, 'confirm_cancel_final', '', 'confirm_cancellation');
             }
         }
         if (last === 'confirm_cancel_final') {
@@ -104,7 +85,6 @@ function runStateMachine(userMessage, sessionData) {
             }
             return reply(data, 'show_intent_buttons', 'Kept your appointment. How else can I help?');
         }
-        // Default: re-ask lookup method if we lost track
         return reply(data, 'ask_lookup_method', 'How would you like to find your appointment?');
     }
 
@@ -125,56 +105,20 @@ function runStateMachine(userMessage, sessionData) {
             if (phone.length >= 10) { data.userPhone = phone; return reply(data, 'fetch_by_phone', 'Looking up your appointments...'); }
         }
         if (last === 'ask_booking_id_reschedule') {
-            // Booking ID entry for reschedule path (based on Booking ID lookup).
-            if (msg.includes('try again')) {
-                return reply(data, 'ask_booking_id_reschedule', 'Please enter your Booking ID (e.g. APT-9281)');
-            }
-            if (msg.includes('phone') || msg.includes('search by phone')) {
-                data.lookupMethod = 'phone';
-                return reply(data, 'ask_phone_reschedule', 'Please enter your registered phone number');
-            }
+            if (msg.includes('try again')) return reply(data, 'ask_booking_id_reschedule', 'Please enter your Booking ID (e.g. APT-9281)');
             data.bookingId = userMessage.trim().toUpperCase();
             return reply(data, 'fetch_by_id', 'Looking up your appointment...');
         }
-        if (last === 'fetch_by_id') {
-            if (msg.includes('try again')) {
-                return reply(data, 'ask_booking_id_reschedule', 'Please enter your Booking ID (e.g. APT-9281)');
-            }
-            if (msg.includes('search by phone')) {
-                data.lookupMethod = 'phone';
-                return reply(data, 'ask_phone_reschedule', 'Please enter your registered phone number');
-            }
-        }
-        if (last === 'fetch_by_phone') {
-            if (msg.includes('try again')) {
-                return reply(data, 'ask_phone_reschedule', 'Please enter your registered phone number');
-            }
-        }
-        if (last === 'show_found_card' || last === 'fetch_by_phone' || last === 'fetch_by_id') {
-            if (msg.includes('reschedule')) {
-                return reply(data, 'ask_new_date', 'What new date would you like?');
-            }
+        if (last === 'fetch_by_id' || last === 'fetch_by_phone') {
+            if (msg.includes('reschedule')) return reply(data, 'ask_new_date', 'What new date would you like?');
         }
         if (last === 'ask_new_date') {
-            const detected = detectDate(msg);
-            if (detected) {
-                data.newDate = detected;
-                data.date = detected;
-                return reply(data, 'show_slots_reschedule', `Showing available slots for ${data.doctorName || 'your doctor'} on ${detected}:`);
-            }
+            const d = detectDate(msg);
+            if (d) { data.newDate = d; data.date = d; return reply(data, 'show_slots_reschedule', `Slots for ${data.doctorName || 'your doctor'} on ${d}:`); }
         }
         if (last === 'show_slots_reschedule') {
             const t = extractTime(msg);
-            if (t) {
-                data.newTimeSlot = t;
-                return reply(data, 'show_reschedule_confirm', '', 'confirm_reschedule');
-            }
-        }
-        if (last === 'show_reschedule_confirm') {
-            if (msg.includes('choose different time')) {
-                data.date = data.newDate;
-                return reply(data, 'show_slots_reschedule', `Showing available slots for ${data.doctorName || 'your doctor'} on ${data.newDate}:`);
-            }
+            if (t) { data.newTimeSlot = t; return reply(data, 'show_reschedule_confirm', '', 'confirm_reschedule'); }
         }
         return reply(data, 'ask_lookup_method', 'How would you like to find your appointment?');
     }
@@ -183,10 +127,7 @@ function runStateMachine(userMessage, sessionData) {
     if (intent === 'my_bookings') {
         if (last === 'ask_phone') {
             const phone = msg.replace(/\D/g, '');
-            if (phone.length >= 10) {
-                data.userPhone = phone;
-                return reply(data, 'show_booking_list', 'Fetching your appointments...');
-            }
+            if (phone.length >= 10) { data.userPhone = phone; return reply(data, 'show_booking_list', 'Fetching your appointments...'); }
             return reply(data, 'ask_phone', 'Please enter a valid 10-digit phone number:');
         }
         return reply(data, 'ask_phone', 'Please enter your registered phone number to view your bookings:');
@@ -195,25 +136,12 @@ function runStateMachine(userMessage, sessionData) {
     // ── GENERAL INQUIRY FLOW ───────────────────────────────────────────────────
     if (intent === 'general_inquiry') {
         if (last === 'ask_freeform_inquiry') return null;
-
-        if (msg.includes('service prices') || msg.includes('service price') || msg.includes('prices') || msg.includes('cost')) {
-            return reply({ ...data, inquiryCardType: 'prices' }, 'show_info_card', 'Our Service Prices:');
-        }
-        if (msg.includes('service duration') || msg.includes('duration')) {
-            return reply({ ...data, inquiryCardType: 'duration' }, 'show_info_card', 'Our Service Duration:');
-        }
-        if (msg.includes('our doctors') || (msg.includes('doctor') && msg.includes('our'))) {
-            return reply(data, 'show_doctor_groups', 'Our Doctors');
-        }
-        if (msg.includes('working hours') || msg.includes('hours') || msg.includes('hour') || msg.includes('timing')) {
-            return reply(data, 'show_info_card', 'Our Working Hours:');
-        }
-        if (msg.includes('location') || msg.includes('contact')) {
-            return reply(data, 'show_info_card', 'Our Location & Contact:');
-        }
-        if (msg.includes('something else')) {
-            return reply(data, 'ask_freeform_inquiry', "Sure! Type your question and I'll do my best to answer.");
-        }
+        if (msg.includes('prices')) return reply({ ...data, inquiryCardType: 'prices' }, 'show_info_card', 'Our Service Prices:');
+        if (msg.includes('duration')) return reply({ ...data, inquiryCardType: 'duration' }, 'show_info_card', 'Our Service Duration:');
+        if (msg.includes('doctor') && msg.includes('our')) return reply(data, 'show_doctor_groups', 'Our Doctors');
+        if (msg.includes('hours') || msg.includes('timing')) return reply(data, 'show_info_card', 'Our Working Hours:');
+        if (msg.includes('location') || msg.includes('contact')) return reply(data, 'show_info_card', 'Our Location & Contact:');
+        if (msg.includes('something else')) return reply(data, 'ask_freeform_inquiry', "Sure! Type your question and I'll do my best to answer.");
         return reply(data, 'show_topics', 'Happy to help! What would you like to know?');
     }
 
@@ -222,21 +150,18 @@ function runStateMachine(userMessage, sessionData) {
         if (!data.serviceCategory) {
             data.serviceCategory = extractCategory(msg);
             if (data.serviceCategory) return reply(data, 'show_doctor_cards', 'Which doctor would you like to check?');
+            return reply(data, 'show_service_buttons', 'Which specialty would you like to check?');
         }
-        if (data.serviceCategory && !data.doctorName && (msg.includes('select'))) {
-            data.doctorName = userMessage.replace(/select specialist|select/gi, '').trim();
-            return reply(data, 'ask_date', 'Which date would you like to check?');
+        if (!data.doctorName || msg.includes('select')) {
+            const dn = userMessage.replace(/select specialist|select|specialist/gi, '').trim();
+            if (dn.length > 3 && !extractTime(dn)) { data.doctorName = dn; return reply(data, 'ask_date', `Which date for ${dn}?`); }
         }
         if (data.doctorName && !data.date) {
             const d = detectDate(msg);
             if (d) { data.date = d; return reply(data, 'show_slots_readonly', ''); }
-            return reply(data, 'ask_date', 'Which date? (e.g., April 25, tomorrow)');
+            return reply(data, 'ask_date', 'Which date? (e.g., Tomorrow)');
         }
-        if (data.date) {
-            if (msg.includes('book a slot') || msg.includes('book slot')) return reply(data, 'show_slots', 'Please select your preferred time slot:', null, 'book_appointment');
-            if (msg.includes('another date') || msg.includes('check another')) { data.date = null; return reply(data, 'ask_date', 'Which date would you like to check?'); }
-        }
-        return reply(data, 'show_service_buttons', 'Which specialty would you like to check?');
+        return reply(data, 'show_service_buttons', 'Which specialty?');
     }
 
     // ── BOOK APPOINTMENT FLOW ──────────────────────────────────────────────────
@@ -251,7 +176,6 @@ function runStateMachine(userMessage, sessionData) {
         // Step 2: Doctor
         const looksLikeTime = extractTime(msg);
         const isSelectingDoc = (msg.includes('select') || msg.includes('specialist') || msg.includes('dr.')) && !looksLikeTime;
-        
         if (data.serviceCategory && (!data.doctorName || isSelectingDoc)) {
             const docName = userMessage.replace(/select specialist|select|specialist/gi, '').trim();
             if (docName.length > 3 && !extractTime(docName)) {
@@ -264,108 +188,54 @@ function runStateMachine(userMessage, sessionData) {
         // Step 3: Date
         if (data.doctorName && !data.date) {
             const d = detectDate(msg);
-            if (d) {
-                data.date = d;
-                return reply(data, 'show_slots', `Perfect. Please pick a time slot for ${data.doctorName} on ${d}:`);
-            }
+            if (d) { data.date = d; return reply(data, 'show_slots', `Perfect. Please pick a time slot for ${data.doctorName} on ${d}:`); }
             return reply(data, 'ask_date', `Which date for ${data.doctorName}?`);
         }
 
         // Step 4: Time Slot
         if (data.date && !data.timeSlot) {
             const t = extractTime(msg);
-            if (t) {
-                data.timeSlot = t;
-                return reply(data, 'ask_name', `Your slot at ${t} is reserved. May I have your full name?`);
-            }
+            if (t) { data.timeSlot = t; return reply(data, 'ask_name', `Your slot at ${t} is reserved. May I have your full name?`); }
             return reply(data, 'show_slots', `Please pick a slot for ${data.date}:`);
         }
 
-        // Final: Name, Age, etc (if not already extracted by one-shot)
-        if (data.timeSlot && !data.userName) return reply(data, 'confirm_booking', "I have your basic details. Please confirm the summary:", 'confirm_booking');
+        // Step 5: Name
+        if (data.timeSlot && !data.userName) {
+             const name = userMessage.replace(/my name is|i am|this is|name is/gi, '').trim();
+             if (name.length > 2 && !msg.includes('select')) { data.userName = name; return reply(data, 'ask_phone', `Thank you, ${name}. What is your phone number?`); }
+             return reply(data, 'ask_name', "May I have your full name for the booking?");
+        }
 
+        // Step 6: Phone
+        if (data.userName && !data.userPhone) {
+            const phone = msg.replace(/\D/g, '');
+            if (phone.length >= 10) { data.userPhone = phone; return reply(data, 'ask_email', "Great. And your email address?"); }
+            return reply(data, 'ask_phone', "Please provide a valid 10-digit phone number:");
+        }
+
+        // Step 7: Email
+        if (data.userPhone && !data.userEmail) {
+            const email = userMessage.trim();
+            if (email.includes('@') && email.includes('.')) { data.userEmail = email; return reply(data, 'confirm_booking', "Excellent! We're all set. Please confirm your summary:", 'confirm_booking'); }
+            return reply(data, 'ask_email', "Please provide a valid email address:");
+        }
 
         return reply(data, 'confirm_booking', "I've gathered your details! Please confirm below:", 'confirm_booking');
-
-
-        if (data.userGender && !data.userPhone && last === 'ask_phone') {
-            const phone = msg.replace(/\D/g, '');
-            if (phone.length >= 10) {
-                data.userPhone = phone;
-                return reply(data, 'ask_email', 'Please provide your email address:');
-            }
-        }
-
-        if (data.userPhone && !data.userEmail && last === 'ask_email') {
-            // Very light email check; booking confirmation will proceed if it looks like an email.
-            const email = userMessage.trim();
-            const looksLikeEmail = email.includes('@') && email.includes('.');
-            if (looksLikeEmail) {
-                data.userEmail = email;
-                return reply(
-                    data,
-                    'confirm_booking',
-                    `Here's your booking summary. Does this look correct?`,
-                    'confirm_booking'
-                );
-            }
-            return reply(data, 'ask_email', 'Please enter a valid email address:');
-        }
-
-        // Deterministic booking confirmation
-        if (last === 'confirm_booking') {
-            if (msg.includes('yes') || msg.includes('confirm') || msg.includes('book') || msg.includes('correct') || msg.includes('right') || msg.includes('okay') || msg.includes('proceed')) {
-                return reply(data, 'confirm_booking', '', 'confirm_booking');
-            }
-            if (msg.includes('modify') || msg.includes('change') || msg.includes('restart')) {
-                // chatController also intercepts modify/change/restart and restarts the flow.
-                return reply(data, 'confirm_booking', '', null);
-            }
-        }
-
-        if (!data.serviceCategory) return reply(data, 'show_service_buttons', 'Which specialty would you like to book?');
     }
 
-    // Fallback
-    return null; // Let AI handle unknown
+    return null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
 function reply(data, nextStep, message, action = null, overrideIntent = null) {
-    return {
-        intent: overrideIntent || data.intent,
-        nextStep,
-        action,
-        extractedData: data,
-        responseMessage: message,
-        lastStep: nextStep
-    };
+    return { intent: overrideIntent || data.intent, nextStep, action, extractedData: data, responseMessage: message, lastStep: nextStep };
 }
 
 function resetFlowData(data) {
-    data.service = null;
-    data.serviceCategory = null;
-    data.date = null;
-    data.timeSlot = null;
-    data.userName = null;
-    data.userAge = null;
-    data.userGender = null;
-    data.userPhone = null;
-    data.userEmail = null;
-    data.notes = null;
-    data.bookingId = null;
-    data.lookupMethod = null;
-    data.newDate = null;
-    data.newTimeSlot = null;
-    data.doctorName = null;
-    data.doctorId = null;
-    data.inquiryCardType = null;
-    data.shortcutCancelFromMyBookings = false;
-    data.cancelFromMyBookings = false;
-    data.shortcutRescheduleFromMyBookings = false;
-    data.rescheduleFromMyBookings = false;
+    data.service = data.serviceCategory = data.date = data.timeSlot = data.userName = data.userAge = data.userGender = data.userPhone = data.userEmail = data.notes = data.bookingId = data.lookupMethod = data.newDate = data.newTimeSlot = data.doctorName = data.doctorId = data.inquiryCardType = null;
+    data.shortcutCancelFromMyBookings = data.cancelFromMyBookings = data.shortcutRescheduleFromMyBookings = data.rescheduleFromMyBookings = false;
     return data;
 }
 
@@ -377,12 +247,7 @@ function startInquiry(data)      { resetFlowData(data); data.intent='general_inq
 function startMyBookings(data)   { resetFlowData(data); data.intent='my_bookings'; return reply(data,'ask_phone','To find your bookings, please enter your registered phone number:'); }
 
 function extractCategory(msg) {
-    if (msg.includes('cardiology')) return 'Cardiology';
-    if (msg.includes('dental'))     return 'Dental';
-    if (msg.includes('eye care') || msg.includes('eye')) return 'Eye Care';
-    if (msg.includes('neurology'))  return 'Neurology';
-    if (msg.includes('orthopedics')) return 'Orthopedics';
-    if (msg.includes('salon'))      return 'Salon';
+    if (msg.includes('cardiology')) return 'Cardiology'; if (msg.includes('dental')) return 'Dental'; if (msg.includes('eye care') || msg.includes('eye')) return 'Eye Care'; if (msg.includes('neurology')) return 'Neurology'; if (msg.includes('orthopedics')) return 'Orthopedics';
     return null;
 }
 
@@ -393,152 +258,45 @@ function extractTime(msg) {
 }
 
 function detectDate(msg) {
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const lower = msg.toLowerCase();
-
-    if (lower.includes('tomorrow')) return format(addDays(now, 1), 'yyyy-MM-dd');
-    if (lower.includes('today')) return format(now, 'yyyy-MM-dd');
-
-    // yyyy-mm-dd explicit
-    const iso = lower.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
-    if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
-
+    const now = new Date(); const lower = msg.toLowerCase(); if (lower.includes('tomorrow')) return format(addDays(now, 1), 'yyyy-MM-dd'); if (lower.includes('today')) return format(now, 'yyyy-MM-dd');
+    const iso = lower.match(/\b(\d{4})-(\d{2})-(\d{2})\b/); if (iso) return iso[0];
     const weekdays = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
     const weekday = weekdays.find(d => lower.includes(d));
     if (weekday) {
-        const target = weekdays.indexOf(weekday);
-        const current = now.getDay();
-        const hasNext = lower.includes('next');
-        const hasThis = lower.includes('this');
-
-        let diff = (target - current + 7) % 7;
-        if (diff === 0) {
-            if (hasNext) diff = 7;
-            if (!hasThis) diff = 7; // "Friday" -> next Friday (not today)
-        } else {
-            if (hasNext) diff += 7;
-        }
-
+        const target = weekdays.indexOf(weekday); const current = now.getDay(); let diff = (target - current + 7) % 7;
+        if (diff === 0 && !lower.includes('this')) diff = 7;
         return format(addDays(now, diff), 'yyyy-MM-dd');
     }
-
-    const months = ['january','february','march','april','may','june','july','august','september','october','november','december'];
-    for (let i = 0; i < months.length; i++) {
-        if (lower.includes(months[i])) {
-            const dayStr = lower.match(new RegExp(`${months[i]}\\s+(\\d{1,2})`))?.[1];
-            const dayFallback = lower.match(/\d+/)?.[0];
-            const day = dayStr || dayFallback;
-            if (day) {
-                const mm = String(i + 1).padStart(2, '0');
-                const dd = String(day).padStart(2, '0');
-                return `${currentYear}-${mm}-${dd}`;
-            }
-        }
-    }
-
-    // April 20 (month without explicit month token handled above), so if we find a month token + digits, it's already handled.
     return null;
 }
 
 function extractBookingId(text) {
-    const m = text.match(/\b(apt-\d{3,6})\b/i);
-    if (!m) return null;
-    return m[1].toUpperCase();
+    const m = text.match(/\b(apt-\d{3,6})\b/i); return m ? m[1].toUpperCase() : null;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// AI WITH ROTATION (secondary fallback only)
-// ─────────────────────────────────────────────────────────────────────────────
 async function callAI(userMessage, conversationHistory, sessionData, services = [], doctors = []) {
-    const apiKeys = Object.keys(process.env)
-        .filter(k => k.startsWith('GEMINI_API_KEY'))
-        .sort().map(k => process.env[k]?.trim()).filter(Boolean);
-
+    const apiKeys = Object.keys(process.env).filter(k => k.startsWith('GEMINI_API_KEY')).map(k => process.env[k]?.trim()).filter(Boolean);
     if (apiKeys.length === 0) return null;
-
-    const sanitizedHistory = [];
-    let expectedRole = 'user';
+    const sanitizedHistory = []; let expectedRole = 'user';
     for (const msg of (conversationHistory || []).filter((m,i)=> i>0||!m.isBot)) {
         const role = (msg.isBot||msg.role==='assistant'||msg.role==='model') ? 'model' : 'user';
-        if (role === expectedRole) {
-            sanitizedHistory.push({ role, parts: [{ text: String(msg.text||'...') }] });
-            expectedRole = role === 'user' ? 'model' : 'user';
-        }
+        if (role === expectedRole) { sanitizedHistory.push({ role, parts: [{ text: String(msg.text||'...') }] }); expectedRole = role === 'user' ? 'model' : 'user'; }
     }
-
     for (const key of apiKeys) {
-        for (const modelName of ["gemini-2.0-flash-exp","gemini-1.5-flash-latest"]) {
-            console.log(`>>> Syncing: ${modelName} (...${key.slice(-4)})`);
-            try {
-                const genAI  = new GoogleGenerativeAI(key);
-                const model  = genAI.getGenerativeModel({ model: modelName });
-                const chat   = model.startChat({ history: sanitizedHistory });
-                const result = await chat.sendMessage([
-                    { text: `Clinic AI. JSON ONLY: {intent,nextStep,action,extractedData,responseMessage}. Date:${format(new Date(),'yyyy-MM-dd')}` },
-                    { text: `CONTEXT:${JSON.stringify(sessionData)}` },
-                    { text: `SERVICES:${JSON.stringify(services)}` },
-                    { text: `DOCTORS:${JSON.stringify(doctors)}` },
-                    { text: `USER:${userMessage}` }
-                ]);
-                const text = result.response.text();
-                const s = text.indexOf('{'), e = text.lastIndexOf('}');
-                if (s !== -1 && e !== -1) {
-                    try { return JSON.parse(text.substring(s, e+1)); } catch(_) {}
-                }
-            } catch(err) {
-                if (err.status === 429) break;
-            }
-        }
+        try {
+            const genAI = new GoogleGenerativeAI(key); const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+            const chat = model.startChat({ history: sanitizedHistory });
+            const result = await chat.sendMessage([{ text: `Clinic AI. Action Required if missing Name/Phone/Email. JSON: {intent,nextStep,action,extractedData,responseMessage}. Date:${format(new Date(),'yyyy-MM-dd')}` }, { text: `CONTEXT:${JSON.stringify(sessionData)} USER:${userMessage}` }]);
+            const text = result.response.text(); const s = text.indexOf('{'), e = text.lastIndexOf('}'); if (s!==-1 && e!==-1) return JSON.parse(text.substring(s, e+1));
+        } catch(err) { if (err.status === 429) continue; }
     }
     return null;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// MAIN EXPORT
-// ─────────────────────────────────────────────────────────────────────────────
 exports.processUserMessage = async (userMessage, conversationHistory, sessionData, services = [], doctors = []) => {
-    // 1. State machine runs FIRST
     const machineResult = runStateMachine(userMessage, sessionData);
-    if (machineResult) {
-        machineResult.lastStep = machineResult.nextStep;
-        return machineResult;
-    }
-
-    // 2. AI fallback for unhandled messages
+    if (machineResult) { machineResult.lastStep = machineResult.nextStep; return machineResult; }
     const aiResult = await callAI(userMessage, conversationHistory, sessionData, services, doctors);
-    if (aiResult && aiResult.responseMessage) {
-        // After freeform "Something Else", show end buttons (Book Appointment + Main Menu)
-        if (sessionData.intent === 'general_inquiry' && sessionData.lastStep === 'ask_freeform_inquiry') {
-            aiResult.nextStep = 'show_general_inquiry_end_buttons';
-            aiResult.lastStep = aiResult.nextStep;
-        }
-        aiResult.lastStep = aiResult.nextStep;
-        return aiResult;
-    }
-
-    // If freeform general inquiry AI could not answer, stay in the inquiry flow instead of
-    // falling back to booking/main menu.
-    if (sessionData.intent === 'general_inquiry' && sessionData.lastStep === 'ask_freeform_inquiry') {
-        return {
-            intent: 'general_inquiry',
-            nextStep: 'show_general_inquiry_end_buttons',
-            action: null,
-            extractedData: sessionData,
-            responseMessage: "I couldn't confidently answer that from our clinic information. You can ask about prices, duration, doctors, hours, or location.",
-            lastStep: 'show_general_inquiry_end_buttons'
-        };
-    }
-
-    // 3. Ultimate fallback
-    return {
-        intent: sessionData.intent || 'book_appointment',
-        nextStep: sessionData.intent === 'general_inquiry' ? 'show_topics' : 'show_intent_buttons',
-        action: null,
-        extractedData: sessionData,
-        responseMessage: sessionData.intent === 'general_inquiry'
-            ? 'Happy to help! What would you like to know?'
-            : 'How may I assist you with your booking today?',
-        lastStep: sessionData.intent === 'general_inquiry' ? 'show_topics' : 'show_intent_buttons'
-    };
+    if (aiResult && aiResult.responseMessage) { aiResult.lastStep = aiResult.nextStep; return aiResult; }
+    return { intent: sessionData.intent || 'book_appointment', nextStep: 'show_intent_buttons', action: null, extractedData: sessionData, responseMessage: 'How may I assist you with your booking today?', lastStep: 'show_intent_buttons' };
 };
