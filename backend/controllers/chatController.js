@@ -212,7 +212,7 @@ exports.handleChat = async (req, res, next) => {
             session.conversationHistory.push({ role: 'user', text: message }, { role: 'assistant', isBot: true });
             return res.json({
               intent: 'book_appointment', nextStep: 'show_doctor_cards', action: null,
-              extractedData: oneShotData, responseMessage: `Excellent! Which Cardiology specialist would you like to consult with?`
+              extractedData: oneShotData, responseMessage: `Excellent! Which ${oneShotData.serviceCategory} specialist would you like to consult with?`
             });
         }
 
