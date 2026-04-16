@@ -3,10 +3,97 @@ const sessionStore = require('../services/sessionStore');
 const Service = require('../models/Service');
 const Appointment = require('../models/Appointment');
 const Doctor = require('../models/Doctor');
+const { format, addDays } = require('date-fns');
 
-/**
- * Handle chat requests with persistent state tracking.
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// SMART ONE-SHOT EXTRACTION
+// Parses a verbose user message for all booking fields at once.
+// Returns null if this doesn't look like a one-shot booking request.
+// ─────────────────────────────────────────────────────────────────────────────
+function smartExtractBooking(message) {
+  const msg = message.toLowerCase();
+
+  // Must look like a booking request
+  const hasBookingIntent = msg.includes('book') || msg.includes('appointment') ||
+                           msg.includes('schedule') || msg.includes('reserve');
+  if (!hasBookingIntent) return null;
+
+  const result = {};
+
+  // ── Category ──────────────────────────────────────────────────────────────
+  if (msg.includes('cardiology'))                       result.serviceCategory = 'Cardiology';
+  else if (msg.includes('dental'))                      result.serviceCategory = 'Dental';
+  else if (msg.includes('eye care') || msg.includes('eye')) result.serviceCategory = 'Eye Care';
+  else if (msg.includes('neurology'))                   result.serviceCategory = 'Neurology';
+  else if (msg.includes('orthopedics'))                 result.serviceCategory = 'Orthopedics';
+
+  // ── Date ──────────────────────────────────────────────────────────────────
+  const now = new Date();
+  if (msg.includes('tomorrow'))      result.date = format(addDays(now, 1), 'yyyy-MM-dd');
+  else if (msg.includes('today'))    result.date = format(now, 'yyyy-MM-dd');
+  else {
+    // "April 25", "May 3" etc.
+    const months = ['january','february','march','april','may','june','july',
+                    'august','september','october','november','december'];
+    for (let i = 0; i < months.length; i++) {
+      if (msg.includes(months[i])) {
+        const dayMatch = msg.match(new RegExp(`${months[i]}\\s+(\\d{1,2})`))?.[1] ||
+                         msg.match(/\d+/)?.[0];
+        if (dayMatch) {
+          result.date = `${now.getFullYear()}-${String(i+1).padStart(2,'0')}-${String(dayMatch).padStart(2,'0')}`;
+        }
+        break;
+      }
+    }
+    // yyyy-mm-dd
+    const iso = msg.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+    if (iso) result.date = `${iso[1]}-${iso[2]}-${iso[3]}`;
+  }
+
+  // ── Time → normalize to SlotGrid format "H:00 AM/PM" ─────────────────────
+  const timeMatch = msg.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i);
+  if (timeMatch) {
+    const hour = parseInt(timeMatch[1]);
+    const period = timeMatch[3].toUpperCase();
+    result.requestedTime = `${hour}:00 ${period}`;
+  }
+
+  // ── Patient name ──────────────────────────────────────────────────────────
+  // "named X", "patient X", "name is X", "patient named X"
+  const nameMatch = message.match(
+    /(?:patient\s+named?|named?\s+|patient\s+is\s+|name\s+is\s+|for\s+patient\s+|for\s+)([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*)/
+  );
+  if (nameMatch) result.userName = nameMatch[1].trim();
+
+  // ── Age ───────────────────────────────────────────────────────────────────
+  const ageMatch = msg.match(/(?:age|aged?)\s*(\d{1,3})/);
+  if (ageMatch) result.userAge = ageMatch[1];
+
+  // ── Gender ────────────────────────────────────────────────────────────────
+  if (msg.includes('female'))      result.userGender = 'Female';
+  else if (msg.includes(' male'))  result.userGender = 'Male';
+  else if (msg.includes('other'))  result.userGender = 'Other';
+
+  // ── Phone ─────────────────────────────────────────────────────────────────
+  const phoneMatch = msg.match(/\b(\d[\d\s\-]{8,14}\d)\b/);
+  if (phoneMatch) {
+    const digits = phoneMatch[1].replace(/\D/g, '');
+    if (digits.length >= 10) result.userPhone = digits.slice(-10);
+  }
+
+  // ── Email ─────────────────────────────────────────────────────────────────
+  const emailMatch = message.match(/[\w.+-]+@[\w-]+\.[a-zA-Z]{2,}/);
+  if (emailMatch) result.userEmail = emailMatch[0];
+
+  // Need at least a category + date to proceed intelligently
+  if (!result.serviceCategory && !result.date) return null;
+
+  return result;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MAIN CHAT HANDLER
+// ─────────────────────────────────────────────────────────────────────────────
 exports.handleChat = async (req, res, next) => {
   const { sessionId, message } = req.body;
 
@@ -23,7 +110,133 @@ exports.handleChat = async (req, res, next) => {
       doctors = [];
     }
 
-    // Pass the ENTIRE session object (which includes lastStep) to AI
+    const lowerMessage = message.toLowerCase();
+
+    // ── SMART ONE-SHOT BOOKING ──────────────────────────────────────────────
+    // Only try this when the user has no active intent (fresh session or main menu)
+    const isFreshSession = !session.intent || session.intent === '';
+    if (isFreshSession) {
+      const oneShotData = smartExtractBooking(message);
+
+      if (oneShotData && oneShotData.serviceCategory) {
+        // Pick a doctor for the requested specialty
+        const specialtyDoctors = doctors.filter(d =>
+          d.category === oneShotData.serviceCategory ||
+          d.specialty === oneShotData.serviceCategory
+        );
+        let chosenDoctor = specialtyDoctors.length > 0
+          ? specialtyDoctors[Math.floor(Math.random() * specialtyDoctors.length)]
+          : null;
+
+        if (chosenDoctor) {
+          oneShotData.doctorName = chosenDoctor.name;
+          oneShotData.doctorId   = chosenDoctor._id.toString();
+        }
+
+        // If we have date + time preference, check availability
+        if (oneShotData.date && chosenDoctor && oneShotData.requestedTime) {
+          let takenSlots = [];
+          if (global.isMongoConnected) {
+            const existing = await Appointment.find({
+              doctorId: oneShotData.doctorId,
+              date: {
+                $gte: new Date(`${oneShotData.date}T00:00:00.000Z`),
+                $lte: new Date(`${oneShotData.date}T23:59:59.999Z`),
+              },
+              status: { $ne: 'cancelled' }
+            });
+            takenSlots = existing.map(a => a.timeSlot);
+          }
+
+          const requestedTime = oneShotData.requestedTime; // e.g. "2:00 PM"
+          const isSlotAvailable = !takenSlots.includes(requestedTime);
+
+          if (isSlotAvailable) {
+            // ✅ Slot is free → show confirm card immediately
+            oneShotData.timeSlot = requestedTime;
+            oneShotData.intent   = 'book_appointment';
+
+            sessionStore.updateSession(sessionId, {
+              extractedData: oneShotData,
+              intent: 'book_appointment',
+              lastStep: 'confirm_booking'
+            });
+            session.conversationHistory.push({ role: 'user', text: message });
+            session.conversationHistory.push({ role: 'assistant', text: "Here's your booking summary!", isBot: true });
+
+            return res.json({
+              intent: 'book_appointment',
+              nextStep: 'confirm_booking',
+              action: 'confirm_booking',
+              extractedData: oneShotData,
+              responseMessage: `I've gathered all your details! Here's your booking summary — please confirm:`
+            });
+
+          } else {
+            // ❌ Slot is taken → show available slots with context message
+            oneShotData.intent = 'book_appointment';
+
+            sessionStore.updateSession(sessionId, {
+              extractedData: oneShotData,
+              intent: 'book_appointment',
+              lastStep: 'show_slots'
+            });
+            session.conversationHistory.push({ role: 'user', text: message });
+            session.conversationHistory.push({ role: 'assistant', text: `That slot is taken. Here are available slots.`, isBot: true });
+
+            return res.json({
+              intent: 'book_appointment',
+              nextStep: 'show_slots',
+              action: null,
+              extractedData: oneShotData,
+              responseMessage: `The ${requestedTime} slot with ${oneShotData.doctorName} on ${oneShotData.date} isn't available. Here are the open slots — please pick one:`
+            });
+          }
+        }
+
+        // Have category + date but no time preference → show slots
+        if (oneShotData.date && chosenDoctor) {
+          oneShotData.intent = 'book_appointment';
+
+          sessionStore.updateSession(sessionId, {
+            extractedData: oneShotData,
+            intent: 'book_appointment',
+            lastStep: 'show_slots'
+          });
+          session.conversationHistory.push({ role: 'user', text: message });
+          session.conversationHistory.push({ role: 'assistant', text: `Here are the available slots.`, isBot: true });
+
+          return res.json({
+            intent: 'book_appointment',
+            nextStep: 'show_slots',
+            action: null,
+            extractedData: oneShotData,
+            responseMessage: `Happy to help! I've selected ${oneShotData.doctorName} for ${oneShotData.serviceCategory}. Please pick your preferred time slot for ${oneShotData.date}:`
+          });
+        }
+
+        // Have category but no doctor (MongoDB offline) → walk them through
+        if (oneShotData.serviceCategory && !chosenDoctor) {
+          oneShotData.intent = 'book_appointment';
+          sessionStore.updateSession(sessionId, {
+            extractedData: oneShotData,
+            intent: 'book_appointment',
+            lastStep: 'show_doctor_cards'
+          });
+          session.conversationHistory.push({ role: 'user', text: message });
+          session.conversationHistory.push({ role: 'assistant', isBot: true });
+          return res.json({
+            intent: 'book_appointment',
+            nextStep: 'show_doctor_cards',
+            action: null,
+            extractedData: oneShotData,
+            responseMessage: `Great! Please select a specialist for ${oneShotData.serviceCategory}:`
+          });
+        }
+      }
+    }
+
+    // ── STANDARD FLOW → State Machine + AI ─────────────────────────────────
     const aiResponse = await aiService.processUserMessage(
       message,
       session.conversationHistory,
@@ -37,37 +250,35 @@ exports.handleChat = async (req, res, next) => {
     console.log("INTENT:", aiResponse.intent);
     console.log("ACTION:", aiResponse.action);
     console.log("NEXT STEP:", aiResponse.nextStep);
-    console.log("SAVING LAST STEP:", aiResponse.nextStep);
     console.log("------------------------------------------------");
 
     // Save history
     session.conversationHistory.push({ role: 'user', text: message });
     session.conversationHistory.push({ role: 'assistant', text: aiResponse.responseMessage, isBot: true });
 
-    // Update session data WITH lastStep persistence
+    // Update session
     sessionStore.updateSession(sessionId, {
       extractedData: { ...session.extractedData, ...aiResponse.extractedData },
       intent: aiResponse.intent,
-      lastStep: aiResponse.nextStep // CRITICAL: Save lastStep for next turn
+      lastStep: aiResponse.nextStep
     });
 
     const updatedSession = sessionStore.getSession(sessionId);
-    const lowerMessage = message.toLowerCase();
-    
-    // Modification logic
+
+    // Modification reset
     if (lowerMessage.includes("modify") || lowerMessage.includes("restart") || lowerMessage.includes("change")) {
-        sessionStore.updateSession(sessionId, { extractedData: {}, lastStep: null });
-        aiResponse.responseMessage = "I've cleared your details. Let's start over. Which specialty would you like to book?";
-        aiResponse.nextStep = "show_service_buttons";
-        return res.json(aiResponse);
+      sessionStore.updateSession(sessionId, { extractedData: {}, lastStep: null });
+      aiResponse.responseMessage = "I've cleared your details. Let's start over. Which specialty would you like to book?";
+      aiResponse.nextStep = "show_service_buttons";
+      return res.json(aiResponse);
     }
 
     const confirmationKeywords = ['yes', 'confirm', 'sure', 'book', 'fine', 'okay', 'correct', 'right', 'cancel it', 'proceed'];
     const isConfirming = confirmationKeywords.some(kw => lowerMessage.includes(kw));
 
-    const shouldBook = (aiResponse.action === "booking_confirmed") || 
+    const shouldBook = (aiResponse.action === "booking_confirmed") ||
                       (aiResponse.action === "confirm_booking" && isConfirming);
-    
+
     const shouldCancel = (aiResponse.action === "cancellation_confirmed") ||
                         (aiResponse.action === "confirm_cancellation" && isConfirming);
 
@@ -102,15 +313,15 @@ exports.handleChat = async (req, res, next) => {
     }
 
     if (shouldCancel) {
-        if (global.isMongoConnected) {
-            const phone = updatedSession.extractedData?.userPhone;
-            if (phone) {
-               await Appointment.deleteMany({ userPhone: phone, status: 'confirmed' });
-            }
+      if (global.isMongoConnected) {
+        const phone = updatedSession.extractedData?.userPhone;
+        if (phone) {
+          await Appointment.deleteMany({ userPhone: phone, status: 'confirmed' });
         }
-        aiResponse.action = "cancellation_confirmed";
-        aiResponse.responseMessage = "Your appointment has been successfully removed from our records.";
-        sessionStore.updateSession(sessionId, { extractedData: {}, lastStep: null });
+      }
+      aiResponse.action = "cancellation_confirmed";
+      aiResponse.responseMessage = "Your appointment has been successfully removed from our records.";
+      sessionStore.updateSession(sessionId, { extractedData: {}, lastStep: null });
     }
 
     res.json(aiResponse);
