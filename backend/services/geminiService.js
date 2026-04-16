@@ -282,8 +282,9 @@ function runStateMachine(userMessage, sessionData) {
         // Final: Name, Age, etc (if not already extracted by one-shot)
         if (data.timeSlot && !data.userName) return reply(data, 'confirm_booking', "I have your basic details. Please confirm the summary:", 'confirm_booking');
 
+
         return reply(data, 'confirm_booking', "I've gathered your details! Please confirm below:", 'confirm_booking');
-    }
+
 
         if (data.userGender && !data.userPhone && last === 'ask_phone') {
             const phone = msg.replace(/\D/g, '');
