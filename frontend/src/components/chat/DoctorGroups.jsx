@@ -39,7 +39,7 @@ const DoctorGroups = ({ onBookWithDoctor, onMainMenu }) => {
 
   if (!ordered.length) {
     return (
-      <div className="glass-card p-6 rounded-3xl border border-white/5 text-center text-gray-500 text-xs">
+      <div className="glass-card p-6 rounded-3xl border border-slate-200 bg-white text-center text-slate-500 text-xs">
         No doctors found.
       </div>
     );
@@ -55,7 +55,7 @@ const DoctorGroups = ({ onBookWithDoctor, onMainMenu }) => {
           transition={{ duration: 0.25 }}
           className="mt-5"
         >
-          <div className="text-xs font-black text-blue-400 uppercase tracking-widest mb-2 px-2 flex items-center gap-2">
+          <div className="text-xs font-black text-blue-600 uppercase tracking-widest mb-2 px-2 flex items-center gap-2">
             <span>{s.icon}</span>
             <span>{s.category}</span>
           </div>
@@ -77,7 +77,7 @@ const DoctorGroups = ({ onBookWithDoctor, onMainMenu }) => {
 
       <button
         onClick={() => onMainMenu && onMainMenu()}
-        className="w-full py-3 mt-2 bg-white/5 text-gray-400 text-xs font-bold rounded-xl border border-white/5 hover:bg-white/10 transition-all"
+        className="w-full py-3 mt-2 bg-white text-slate-500 text-xs font-bold rounded-xl border border-slate-200 hover:bg-slate-50 transition-all"
       >
         🔙 Main Menu
       </button>

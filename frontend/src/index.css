@@ -91,6 +91,16 @@ h1, h2, h3, h4, h5, h6 {
   @apply bg-white border border-slate-200/80 shadow-[0_12px_30px_rgba(15,23,42,0.06)];
 }
 
+/* Hide scrollbars for horizontal card strips */
+.no-scrollbar {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 /* Custom Animations */
 @keyframes float {
   0% { transform: translateY(0px); }
