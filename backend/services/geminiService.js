@@ -29,8 +29,8 @@ function runStateMachine(userMessage, sessionData) {
     const isBooking = (msg.includes('book') || msg.includes('appointment')) && !msg.includes('cancel') && !msg.includes('reschedule') && !msg.includes('confirm') && !msg.includes('my') && !msg.includes('your');
     if (isBooking) return startBooking(data);
     if (msg.includes('cancel') && (msg.includes('appointment') || msg.includes('booking')) && !msg.includes('cancel this')) return startCancel(data);
-    if (msg.includes('reschedule')) return startReschedule(data);
-    if (msg.includes('my bookings') || (msg.includes('my') && msg.includes('appointment'))) return startMyBookings(data);
+    if (msg.includes('reschedule') && !msg.includes('reschedule this')) return startReschedule(data);
+    if ((msg === 'my bookings' || msg === 'my appointment') || (msg.includes('my') && msg.includes('appointment') && !msg.includes('reschedule') && !msg.includes('cancel'))) return startMyBookings(data);
     if (msg.includes('general inquiry') || msg.includes('prices') || msg.includes('location') || msg.includes('hours')) return startInquiry(data);
 
     // ── CANCEL FLOW ────────────────────────────────────────────────────────────
