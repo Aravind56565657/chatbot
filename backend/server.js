@@ -27,8 +27,6 @@ global.mockServices = [
   { _id: "s2", name: "Teeth Cleaning", category: "Dental", duration: 30, price: 800, description: "Complete scaling.", isActive: true },
   { _id: "s3", name: "General Consultation", category: "Medical", duration: 30, price: 300, description: "Primary care.", isActive: true },
   { _id: "s4", name: "Specialist Consultation", category: "Medical", duration: 45, price: 800, description: "Subject specialist.", isActive: true },
-  { _id: "s5", name: "Hair Cut & Styling", category: "Salon", duration: 60, price: 400, description: "Expert hair styling.", isActive: true },
-  { _id: "s6", name: "Deep Hair Treatment", category: "Salon", duration: 90, price: 1200, description: "Intensive treatment.", isActive: true }
 ];
 
 // Middleware

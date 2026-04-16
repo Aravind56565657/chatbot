@@ -171,7 +171,7 @@ const ChatPage = () => {
   ];
   const serviceCategories = [
     { text: "Cardiology", icon: "🫀" }, { text: "Dental", icon: "🦷" }, { text: "Eye Care", icon: "👁️" },
-    { text: "Neurology", icon: "🧠" }, { text: "Orthopedics", icon: "🦴" }, { text: "Salon", icon: "💇" }
+    { text: "Neurology", icon: "🧠" }, { text: "Orthopedics", icon: "🦴" }
   ];
   const lookupOptions = [
     { text: "I have my Booking ID", icon: "🔖" }, { text: "Search by Phone Number", icon: "📞" }
