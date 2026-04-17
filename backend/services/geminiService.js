@@ -1,8 +1,8 @@
 const { format, addDays } = require('date-fns');
 
 /**
- * ELITE CONCIERGE ENGINE - Spec-Compliant V6.1.
- * Fixed: Doctor-Specialty name collision and Session Reset continuity.
+ * ELITE CONCIERGE ENGINE - Spec-Compliant V7.
+ * Hard-aligned with frontend action tokens: 'booking_confirmed', 'cancellation_secured', 'reschedule_secured'.
  */
 
 function runStateMachine(userMessage, sessionData) {
@@ -39,16 +39,18 @@ function runStateMachine(userMessage, sessionData) {
 
     // ── 3. FLOW: BOOK APPOINTMENT ──
     if (intent === 'book_appointment') {
-        if (lastStep === 'show_confirm_card' && (msg.includes('confirm') || msg.includes('yes'))) return reply(data, 'booking_confirmed', 'Splendid. Your visit is now officially confirmed.', 'confirm_booking');
+        if (lastStep === 'show_confirm_card' && (msg.includes('confirm') || msg.includes('yes'))) {
+            // ACTION: booking_confirmed (Matches frontend)
+            return reply(data, 'booking_confirmed', 'Splendid. Your visit is now officially confirmed.', 'booking_confirmed');
+        }
         
         const extracted = extractFieldsFromMessage(userMessage);
         Object.keys(extracted).forEach(k => { if (extracted[k]) data[k] = extracted[k]; });
         
-        if (!data.serviceCategory) return reply(data, 'show_service_buttons', 'For which medical specialty would you like an appointment?');
+        if (!data.serviceCategory) return reply(data, 'show_service_buttons', 'For which medical specialty do you require?');
         
         if (!data.doctorName) {
-            const dn = userMessage.replace(/select specialist|select specialist|select|dr\./gi, '').trim();
-            // Refined: Ensure selecting a specialist is not confused with selecting the specialty again
+            const dn = userMessage.replace(/select specialist|select|dr\./gi, '').trim();
             const isSpecialtyClick = data.serviceCategory && dn.toLowerCase().includes(data.serviceCategory.toLowerCase());
             if (dn.length > 3 && !extractTime(dn) && !isSpecialtyClick) { 
                 data.doctorName = dn; 
@@ -70,7 +72,10 @@ function runStateMachine(userMessage, sessionData) {
     if (intent === 'cancel_appointment') {
         if (lastStep === 'ask_phone_cancel') { const p = msg.replace(/\D/g, ''); if (p.length >= 10) { data.userPhone = p; return reply(data, 'fetch_by_phone', 'Searching our records...'); } return reply(data, 'ask_phone_cancel', 'Provide a 10-digit phone number:'); }
         if (lastStep === 'ask_booking_id') { data.bookingId = userMessage.toUpperCase(); return reply(data, 'fetch_by_id', 'Locating visit...'); }
-        if (lastStep === 'confirm_cancel_final' && (msg.includes('yes') || msg.includes('confirm'))) return reply(data, 'booking_confirmed', 'Success. Appointment cancelled.', 'cancellation_confirmed');
+        if (lastStep === 'confirm_cancel_final' && (msg.includes('yes') || msg.includes('confirm'))) {
+            // ACTION: cancellation_secured (Matches frontend)
+            return reply(data, 'booking_confirmed', 'Success. Appointment cancelled.', 'cancellation_secured');
+        }
         if (lastStep === 'fetch_by_id' || lastStep === 'fetch_by_phone' || lastStep === 'show_found_card' || lastStep === 'show_booking_list') { if (msg.includes('cancel')) return reply(data, 'confirm_cancel_final', 'Confirm cancellation?', 'confirm_cancellation'); }
         return reply(data, 'ask_lookup_method', 'How shall we find the appointment to cancel?');
     }
@@ -79,24 +84,13 @@ function runStateMachine(userMessage, sessionData) {
     if (intent === 'reschedule_appointment') {
         if (lastStep === 'ask_phone_reschedule') { const p = msg.replace(/\D/g, ''); if (p.length >= 10) { data.userPhone = p; return reply(data, 'fetch_by_phone', 'Locating visit...'); } return reply(data, 'ask_phone_reschedule', 'Provide phone number:'); }
         if (lastStep === 'ask_new_date') { const d = detectDate(msg); if (d) { data.newDate = d; data.date = d; return reply(data, 'show_slots_reschedule', `Slots on ${d}:`); } return reply(data, 'ask_new_date', 'Which new date?'); }
-        if (lastStep === 'show_slots_reschedule') { const t = extractTime(msg); if (t) { data.newTimeSlot = t; return reply(data, 'show_reschedule_confirm', '', 'reschedule_confirmed'); } }
+        if (lastStep === 'show_slots_reschedule') { const t = extractTime(msg); if (t) { data.newTimeSlot = t; return reply(data, 'show_reschedule_confirm', '', 'confirm_reschedule'); } }
+        if (lastStep === 'confirm_reschedule_final' && (msg.includes('yes') || msg.includes('confirm'))) {
+             // ACTION: reschedule_secured (Matches frontend)
+             return reply(data, 'booking_confirmed', 'Success. Appointment rescheduled.', 'reschedule_secured');
+        }
         if (lastStep === 'fetch_by_id' || lastStep === 'fetch_by_phone' || lastStep === 'show_found_card' || lastStep === 'show_booking_list') { if (msg.includes('reschedule')) return reply(data, 'ask_new_date', 'On which date?'); }
         return reply(data, 'ask_lookup_method', 'How should we locate the appointment you wish to reschedule?');
-    }
-
-    // ── 6. FLOW: MY BOOKINGS ──
-    if (intent === 'my_bookings') {
-        const p = msg.replace(/\D/g, '');
-        if (lastStep === 'ask_phone' && p.length >= 10) { data.userPhone = p; return reply(data, 'show_booking_list', 'Searching your history...'); }
-        return reply(data, 'ask_phone', 'Please provide your phone number for history:');
-    }
-
-    // ── 7. FLOW: INQUIRY ──
-    if (intent === 'general_inquiry') {
-        if (msg.includes('price')) return reply({ ...data, inquiryCardType: 'prices' }, 'show_info_card', 'Our pricing and consult fees:');
-        if (msg.includes('hour') || msg.includes('open')) return reply(data, 'show_info_card', 'Clinic hours:');
-        if (msg.includes('location')) return reply(data, 'show_info_card', 'We are located at:');
-        return reply(data, 'show_topics', 'What information can I provide?');
     }
 
     return null;
@@ -121,7 +115,7 @@ function extractFieldsFromMessage(msg) {
     if(n) d.userName = n[1].trim();
     const a = l.match(/(?:age|aged?)\s*(\d{1,3})/); if(a) d.userAge = Number(a[1]);
     if(l.includes('female')) d.userGender = 'Female'; else if(l.includes(' male')) d.userGender = 'Male';
-    const phMatch = l.match(/\b(\d[\d\s\-]{8,14}\d)\b/); if(phMatch) d.userPhone = phMatch[1].replace(/\D/g, '').slice(-10);
+    const pm = l.match(/\b(\d[\d\s\-]{8,14}\d)\b/); if(pm) d.userPhone = pm[1].replace(/\D/g, '').slice(-10);
     return d;
 }
 
